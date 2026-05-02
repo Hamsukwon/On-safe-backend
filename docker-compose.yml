@@ -1,0 +1,61 @@
+version: "3.9"
+
+services:
+
+  # ── Python AI 서버 (FastAPI + MediaPipe + Firestore) ──────────────────────
+  python-ai:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    container_name: onsafe-python-ai
+    ports:
+      - "8000:8000"
+    environment:
+      REDIS_URL: redis://redis:6379
+      FIREBASE_CREDENTIALS: /app/secrets/serviceAccountKey.json
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+    volumes:
+      - ./serviceAccountKey.json:/app/secrets/serviceAccountKey.json:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - onsafe-network
+    restart: unless-stopped
+
+  # ── Kotlin Spring Boot API (Firestore 기반) ───────────────────────────────
+  kotlin-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.kotlin
+    container_name: onsafe-kotlin-api
+    ports:
+      - "8080:8080"
+    environment:
+      FIREBASE_CREDENTIALS: /app/secrets/serviceAccountKey.json
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      SPRING_PROFILES_ACTIVE: docker
+    volumes:
+      - ./serviceAccountKey.json:/app/secrets/serviceAccountKey.json:ro
+    networks:
+      - onsafe-network
+    restart: unless-stopped
+
+  # ── Redis (python-ai 프레임 버퍼 · 점수 캐시) ─────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: onsafe-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - onsafe-network
+    restart: unless-stopped
+
+networks:
+  onsafe-network:
+    driver: bridge

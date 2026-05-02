@@ -1,0 +1,27 @@
+FROM python:3.11-slim
+
+# OpenCV / MediaPipe 헤드리스 환경에 필요한 시스템 라이브러리
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgl1 \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# 의존성 레이어 캐싱 — 소스 변경 시 pip install 재실행 방지
+COPY requirements.txt .
+
+# opencv-python-headless 로 대체 — GUI 라이브러리 제거로 이미지 ~100 MB 절감
+# sed 로 임시 파일 생성: grep|tr 파이프는 requirements.txt 주석 줄을 패키지명으로 전달해 실패함
+RUN sed '/^opencv-python/d' requirements.txt > /tmp/req.txt \
+    && pip install --no-cache-dir -r /tmp/req.txt \
+    && pip install --no-cache-dir "opencv-python-headless>=4.8.0"
+
+COPY app/ ./app/
+COPY pkl/ ./pkl/
+
+# serviceAccountKey.json 은 docker-compose volume 으로 주입 (이미지에 포함 금지)
+
+EXPOSE 8000
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

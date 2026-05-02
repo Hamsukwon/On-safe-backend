@@ -1,0 +1,2 @@
+firebase:
+  credentials: /app/secrets/serviceAccountKey.json

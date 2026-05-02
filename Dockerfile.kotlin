@@ -1,0 +1,28 @@
+# ── 1단계: 빌드 ──────────────────────────────────────────────────────────────
+FROM eclipse-temurin:17-jdk-alpine AS builder
+
+WORKDIR /app
+
+# Gradle Wrapper 먼저 복사 → 의존성 레이어 캐싱
+COPY gradlew .
+COPY gradle/ gradle/
+# Windows CRLF → LF 변환 후 실행 권한 부여 (Windows에서 복사된 gradlew 대응)
+RUN sed -i 's/\r$//' gradlew && chmod +x gradlew
+
+COPY build.gradle.kts settings.gradle.kts .
+# 의존성만 먼저 다운로드 (소스 변경 시 재다운로드 방지)
+RUN ./gradlew dependencies --no-daemon -q
+
+COPY src/ src/
+RUN ./gradlew bootJar --no-daemon -x test --stacktrace
+
+# ── 2단계: 실행 (JRE만 포함, 이미지 크기 최소화) ─────────────────────────────
+FROM eclipse-temurin:17-jre-alpine
+
+WORKDIR /app
+
+COPY --from=builder /app/build/libs/*.jar app.jar
+
+EXPOSE 8080
+
+ENTRYPOINT ["java", "-jar", "app.jar"]

@@ -1,0 +1,26 @@
+package com.onsafe.backend.domain.user.model.dto
+
+import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.Pattern
+import jakarta.validation.constraints.Size
+
+data class UserRegisterRequest(
+    @field:NotBlank(message = "아이디를 입력해주세요.")
+    val userId: String,
+
+    @field:Size(min = 4, message = "비밀번호는 4자 이상이어야 합니다.")
+    val password: String,
+
+    @field:NotBlank(message = "보호자 이름을 입력해주세요.")
+    val name: String,
+
+    @field:Pattern(regexp = "^01[016789]-?\\d{3,4}-?\\d{4}$", message = "전화번호 형식이 올바르지 않습니다.")
+    val phone: String,
+
+    @field:NotBlank(message = "이메일을 입력해주세요.")
+    val mail: String,
+
+    val wardName: String? = null,
+    val address: String? = null,
+    val cameraUrl: String? = null
+)
