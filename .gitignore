@@ -212,3 +212,21 @@ poetry.toml
 pyrightconfig.json
 
 # End of https://www.toptal.com/developers/gitignore/api/kotlin,python,java
+
+### Spring Boot ###
+.gradle/
+build/
+out/
+*.iml
+.idea/
+application-local.yml
+application-prod.yml
+
+### 프로젝트 문서 (작업용 txt) ###
+*.txt
+!requirements.txt
+
+### 민감 정보 ###
+local.properties
+.env
+*.env
