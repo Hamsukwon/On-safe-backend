@@ -230,3 +230,4 @@ application-prod.yml
 local.properties
 .env
 *.env
+serviceAccountKey.json
