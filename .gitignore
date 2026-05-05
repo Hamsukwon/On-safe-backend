@@ -231,3 +231,7 @@ local.properties
 .env
 *.env
 serviceAccountKey.json
+google-services.json
+**/google-services.json
+src/main/resources/*.json
+application-secret.yml
