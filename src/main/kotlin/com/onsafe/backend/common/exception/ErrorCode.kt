@@ -44,5 +44,14 @@ enum class ErrorCode(
     REALTIME_DATA_NOT_FOUND(HttpStatus.NOT_FOUND, "실시간 데이터가 없습니다."),
 
     // ── 아이디 찾기 ───────────────────────────────────────
-    USER_ID_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 사용 중인 아이디입니다.")
+    USER_ID_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 사용 중인 아이디입니다."),
+
+    // ── 비밀번호 재설정 ────────────────────────────────────
+    MAIL_NOT_MATCH(HttpStatus.BAD_REQUEST, "이메일이 일치하지 않습니다."),
+    INVALID_RESET_CODE(HttpStatus.BAD_REQUEST, "유효하지 않은 인증코드입니다."),
+    RESET_CODE_EXPIRED(HttpStatus.BAD_REQUEST, "인증코드가 만료되었습니다. 다시 요청해 주세요."),
+
+    // ── 이메일 인증 ────────────────────────────────────────
+    INVALID_EMAIL_CODE(HttpStatus.BAD_REQUEST, "유효하지 않은 인증코드입니다."),
+    EMAIL_CODE_EXPIRED(HttpStatus.BAD_REQUEST, "인증코드가 만료되었습니다. 다시 요청해 주세요.")
 }

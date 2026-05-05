@@ -1,5 +1,5 @@
 # ── 1단계: 빌드 ──────────────────────────────────────────────────────────────
-FROM eclipse-temurin:17-jdk-alpine AS builder
+FROM eclipse-temurin:17-jdk-jammy AS builder
 
 WORKDIR /app
 
@@ -17,7 +17,7 @@ COPY src/ src/
 RUN ./gradlew bootJar --no-daemon -x test --stacktrace
 
 # ── 2단계: 실행 (JRE만 포함, 이미지 크기 최소화) ─────────────────────────────
-FROM eclipse-temurin:17-jre-alpine
+FROM eclipse-temurin:17-jre-jammy
 
 WORKDIR /app
 

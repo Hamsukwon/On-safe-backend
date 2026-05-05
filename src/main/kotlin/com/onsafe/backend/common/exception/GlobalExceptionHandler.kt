@@ -6,6 +6,7 @@ import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 import org.springframework.web.bind.support.WebExchangeBindException
+import org.springframework.web.server.ServerWebInputException
 
 @RestControllerAdvice
 class GlobalExceptionHandler {
@@ -23,6 +24,22 @@ class GlobalExceptionHandler {
     fun handleValidationException(e: WebExchangeBindException): ResponseEntity<ApiResponse<Nothing>> {
         val message = e.bindingResult.fieldErrors
             .joinToString(", ") { "${it.field}: ${it.defaultMessage}" }
+        return ResponseEntity
+            .status(HttpStatus.BAD_REQUEST)
+            .body(ApiResponse.fail(message))
+    }
+
+    /** JSON 역직렬화 실패 (필드명 불일치, 타입 오류 등) → 500 대신 400 반환 */
+    @ExceptionHandler(ServerWebInputException::class)
+    fun handleServerWebInputException(e: ServerWebInputException): ResponseEntity<ApiResponse<Nothing>> {
+        val cause = e.cause?.message ?: e.message ?: "요청 형식이 올바르지 않습니다."
+        val message = when {
+            cause.contains("Missing required creator property") ->
+                "필수 필드가 누락되었습니다. 요청 필드명이 snake_case인지 확인해 주세요. (예: user_id, device_id)"
+            cause.contains("Cannot deserialize") ->
+                "필드 타입이 올바르지 않습니다."
+            else -> "요청 형식이 올바르지 않습니다."
+        }
         return ResponseEntity
             .status(HttpStatus.BAD_REQUEST)
             .body(ApiResponse.fail(message))
