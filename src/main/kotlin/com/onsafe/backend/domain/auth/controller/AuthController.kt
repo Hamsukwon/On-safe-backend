@@ -43,6 +43,20 @@ class AuthController(private val authService: AuthService) {
         return ApiResponse.ok(response)
     }
 
+    @Operation(summary = "비밀번호 재설정 코드 발송")
+    @PostMapping("/send-reset-code")
+    suspend fun sendResetCode(@Valid @RequestBody request: SendResetCodeRequest): ApiResponse<Unit> {
+        authService.sendResetCode(request)
+        return ApiResponse.ok(message = "재설정 코드를 발송했습니다.")
+    }
+
+    @Operation(summary = "비밀번호 재설정 코드 확인")
+    @PostMapping("/verify-reset-code")
+    suspend fun verifyResetCode(@Valid @RequestBody request: VerifyResetCodeRequest): ApiResponse<Unit> {
+        authService.verifyResetCode(request)
+        return ApiResponse.ok(message = "코드 확인이 완료되었습니다.")
+    }
+
     @Operation(summary = "비밀번호 재설정")
     @PostMapping("/reset-password")
     suspend fun resetPassword(@Valid @RequestBody request: ResetPasswordRequest): ApiResponse<Unit> {

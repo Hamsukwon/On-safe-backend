@@ -1,8 +1,10 @@
 package com.onsafe.backend.domain.auth.service
 
+import com.onsafe.backend.common.email.EmailService
 import com.onsafe.backend.common.exception.BusinessException
 import com.onsafe.backend.common.exception.ErrorCode
 import com.onsafe.backend.common.security.JwtProvider
+import com.onsafe.backend.common.util.ResetCodeStore
 import com.onsafe.backend.domain.auth.model.dto.*
 import com.onsafe.backend.domain.user.model.dto.UserRegisterRequest
 import com.onsafe.backend.domain.user.model.entity.User
@@ -14,7 +16,9 @@ import org.springframework.stereotype.Service
 class AuthService(
     private val userRepository: UserRepository,
     private val passwordEncoder: PasswordEncoder,
-    private val jwtProvider: JwtProvider
+    private val jwtProvider: JwtProvider,
+    private val resetCodeStore: ResetCodeStore,
+    private val emailService: EmailService
 ) {
 
     suspend fun register(request: UserRegisterRequest) {
@@ -80,6 +84,22 @@ class AuthService(
         val user = userRepository.findByUserId(request.userId)
             ?: throw BusinessException(ErrorCode.USER_NOT_FOUND)
         userRepository.save(user.copy(fcmToken = request.fcmToken))
+    }
+
+    suspend fun sendResetCode(request: SendResetCodeRequest) {
+        val user = userRepository.findByUserId(request.userId)
+            ?: throw BusinessException(ErrorCode.USER_NOT_FOUND)
+        if (user.mail != request.mail) throw BusinessException(ErrorCode.MAIL_MISMATCH)
+        val code = (100000..999999).random().toString()
+        resetCodeStore.save(request.userId, code)
+        emailService.sendResetCode(request.mail, code)
+    }
+
+    suspend fun verifyResetCode(request: VerifyResetCodeRequest) {
+        if (!resetCodeStore.verify(request.userId, request.code)) {
+            throw BusinessException(ErrorCode.INVALID_RESET_CODE)
+        }
+        resetCodeStore.remove(request.userId)
     }
 
     private fun issueTokens(userId: String, mail: String) = TokenResponse(
