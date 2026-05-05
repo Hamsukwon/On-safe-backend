@@ -51,6 +51,9 @@ dependencies {
     // 유효성 검사
     implementation("org.springframework.boot:spring-boot-starter-validation")
 
+    // 이메일 발송 (비밀번호 재설정 코드)
+    implementation("org.springframework.boot:spring-boot-starter-mail")
+
     // SpringDoc OpenAPI (Swagger UI)
     implementation("org.springdoc:springdoc-openapi-starter-webflux-ui:2.8.0")
 

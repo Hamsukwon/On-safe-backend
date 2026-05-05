@@ -53,5 +53,6 @@ enum class ErrorCode(
 
     // ── 이메일 인증 ────────────────────────────────────────
     INVALID_EMAIL_CODE(HttpStatus.BAD_REQUEST, "유효하지 않은 인증코드입니다."),
-    EMAIL_CODE_EXPIRED(HttpStatus.BAD_REQUEST, "인증코드가 만료되었습니다. 다시 요청해 주세요.")
+    EMAIL_CODE_EXPIRED(HttpStatus.BAD_REQUEST, "인증코드가 만료되었습니다. 다시 요청해 주세요."),
+    MAIL_SEND_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "이메일 발송에 실패했습니다.")
 }

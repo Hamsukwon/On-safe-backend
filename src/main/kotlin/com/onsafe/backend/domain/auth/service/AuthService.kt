@@ -26,14 +26,12 @@ class AuthService(
     private val resetCodes get() = firestore.collection("password_reset_codes")
     private val emailCodes get() = firestore.collection("email_verify_codes")
 
-    /** 아이디 중복확인 */
     suspend fun checkId(request: CheckIdRequest) {
         if (userRepository.existsByUserId(request.userId)) {
             throw BusinessException(ErrorCode.USER_ID_ALREADY_EXISTS)
         }
     }
 
-    /** 회원가입용 이메일 인증코드 발송 */
     suspend fun sendEmailCode(request: SendEmailCodeRequest) {
         val code = (100000..999999).random().toString()
         val expiresAt = LocalDateTime.now().plusMinutes(3)
@@ -45,7 +43,6 @@ class AuthService(
         emailService.sendEmailVerificationCode(request.mail, code)
     }
 
-    /** 회원가입용 이메일 인증코드 확인 */
     suspend fun verifyEmailCode(request: VerifyEmailCodeRequest) {
         val doc = emailCodes.document(request.mail).get().await()
         if (!doc.exists()) throw BusinessException(ErrorCode.INVALID_EMAIL_CODE)
@@ -60,7 +57,6 @@ class AuthService(
         emailCodes.document(request.mail).delete().await()
     }
 
-    /** 비밀번호 재설정 인증코드 발송 */
     suspend fun sendResetCode(request: SendResetCodeRequest) {
         val user = userRepository.findByUserId(request.userId)
             ?: throw BusinessException(ErrorCode.USER_NOT_FOUND)
@@ -76,7 +72,6 @@ class AuthService(
         emailService.sendResetCode(request.mail, code)
     }
 
-    /** 인증코드 확인 */
     suspend fun verifyResetCode(request: VerifyResetCodeRequest) {
         val doc = resetCodes.document(request.userId).get().await()
         if (!doc.exists()) throw BusinessException(ErrorCode.INVALID_RESET_CODE)
