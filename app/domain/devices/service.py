@@ -31,7 +31,7 @@ async def register_device(user_id: str, req: DeviceRegisterRequest) -> dict:
         "device_id": req.device_id,
         "device_name": req.device_name,
         "user_id": user_id,
-        "status": "offline",
+        "status": "inactive",
         "camera_url": req.camera_url,
         "last_seen": datetime.now(timezone.utc),
     })
