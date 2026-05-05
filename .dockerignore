@@ -5,6 +5,7 @@ serviceAccountKey.json
 .env
 *.env
 local.properties
+src/main/resources/application-secret.yml
 
 # IDE / Gradle 캐시
 .idea/
