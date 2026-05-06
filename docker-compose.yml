@@ -33,6 +33,8 @@ services:
       FIREBASE_CREDENTIALS: /app/secrets/serviceAccountKey.json
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
       SPRING_PROFILES_ACTIVE: docker
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
     volumes:
       - ./serviceAccountKey.json:/app/secrets/serviceAccountKey.json:ro
     networks:

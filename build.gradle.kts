@@ -45,6 +45,9 @@ dependencies {
     runtimeOnly("io.jsonwebtoken:jjwt-impl:0.12.6")
     runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.12.6")
 
+    // 이메일 전송
+    implementation("org.springframework.boot:spring-boot-starter-mail")
+
     // 유효성 검사
     implementation("org.springframework.boot:spring-boot-starter-validation")
 

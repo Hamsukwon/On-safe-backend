@@ -10,6 +10,7 @@ data class User(
     val wardName: String,
     val mail: String,
     val address: String? = null,
+    val addressDetail: String? = null,
     val cameraUrl: String? = null,
     val fcmToken: String? = null,
     val createdAt: LocalDateTime = LocalDateTime.now()

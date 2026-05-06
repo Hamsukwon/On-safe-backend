@@ -3,7 +3,6 @@ package com.onsafe.backend.domain.auth.controller
 import com.onsafe.backend.common.response.ApiResponse
 import com.onsafe.backend.domain.auth.model.dto.*
 import com.onsafe.backend.domain.auth.service.AuthService
-import com.onsafe.backend.domain.user.model.dto.UserRegisterRequest
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
@@ -18,7 +17,7 @@ class AuthController(private val authService: AuthService) {
     @Operation(summary = "회원가입")
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
-    suspend fun register(@Valid @RequestBody request: UserRegisterRequest): ApiResponse<Unit> {
+    suspend fun register(@Valid @RequestBody request: RegisterRequest): ApiResponse<Unit> {
         authService.register(request)
         return ApiResponse.ok(message = "회원가입이 완료되었습니다.")
     }
@@ -43,20 +42,6 @@ class AuthController(private val authService: AuthService) {
         return ApiResponse.ok(response)
     }
 
-    @Operation(summary = "비밀번호 재설정 코드 발송")
-    @PostMapping("/send-reset-code")
-    suspend fun sendResetCode(@Valid @RequestBody request: SendResetCodeRequest): ApiResponse<Unit> {
-        authService.sendResetCode(request)
-        return ApiResponse.ok(message = "재설정 코드를 발송했습니다.")
-    }
-
-    @Operation(summary = "비밀번호 재설정 코드 확인")
-    @PostMapping("/verify-reset-code")
-    suspend fun verifyResetCode(@Valid @RequestBody request: VerifyResetCodeRequest): ApiResponse<Unit> {
-        authService.verifyResetCode(request)
-        return ApiResponse.ok(message = "코드 확인이 완료되었습니다.")
-    }
-
     @Operation(summary = "비밀번호 재설정")
     @PostMapping("/reset-password")
     suspend fun resetPassword(@Valid @RequestBody request: ResetPasswordRequest): ApiResponse<Unit> {
@@ -69,6 +54,41 @@ class AuthController(private val authService: AuthService) {
     suspend fun updateFcmToken(@Valid @RequestBody request: FcmTokenRequest): ApiResponse<Unit> {
         authService.updateFcmToken(request)
         return ApiResponse.ok(message = "FCM 토큰 등록 완료")
+    }
+
+    @Operation(summary = "아이디 중복확인")
+    @PostMapping("/check-id")
+    suspend fun checkId(@Valid @RequestBody request: CheckIdRequest): ApiResponse<Unit> {
+        authService.checkId(request)
+        return ApiResponse.ok(message = "사용 가능한 아이디입니다.")
+    }
+
+    @Operation(summary = "회원가입 이메일 인증코드 발송")
+    @PostMapping("/send-email-code")
+    suspend fun sendEmailCode(@Valid @RequestBody request: SendEmailCodeRequest): ApiResponse<Unit> {
+        authService.sendEmailCode(request)
+        return ApiResponse.ok(message = "인증코드가 발송되었습니다.")
+    }
+
+    @Operation(summary = "회원가입 이메일 인증코드 확인")
+    @PostMapping("/verify-email-code")
+    suspend fun verifyEmailCode(@Valid @RequestBody request: VerifyEmailCodeRequest): ApiResponse<Unit> {
+        authService.verifyEmailCode(request)
+        return ApiResponse.ok(message = "이메일 인증이 완료되었습니다.")
+    }
+
+    @Operation(summary = "비밀번호 재설정 인증코드 발송")
+    @PostMapping("/send-reset-code")
+    suspend fun sendResetCode(@Valid @RequestBody request: SendResetCodeRequest): ApiResponse<Unit> {
+        authService.sendResetCode(request)
+        return ApiResponse.ok(message = "인증코드가 발송되었습니다.")
+    }
+
+    @Operation(summary = "비밀번호 재설정 인증코드 확인")
+    @PostMapping("/verify-reset-code")
+    suspend fun verifyResetCode(@Valid @RequestBody request: VerifyResetCodeRequest): ApiResponse<Unit> {
+        authService.verifyResetCode(request)
+        return ApiResponse.ok(message = "인증코드가 확인되었습니다.")
     }
 
     @Operation(summary = "토큰 재발급")

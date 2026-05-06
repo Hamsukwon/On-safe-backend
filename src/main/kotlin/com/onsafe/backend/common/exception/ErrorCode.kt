@@ -46,8 +46,13 @@ enum class ErrorCode(
     // ── 아이디 찾기 ───────────────────────────────────────
     USER_ID_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 사용 중인 아이디입니다."),
 
-    // ── 비밀번호 재설정 ───────────────────────────────────
-    MAIL_MISMATCH(HttpStatus.BAD_REQUEST, "아이디와 이메일이 일치하지 않습니다."),
-    INVALID_RESET_CODE(HttpStatus.BAD_REQUEST, "인증 코드가 올바르지 않거나 만료되었습니다."),
+    // ── 비밀번호 재설정 ────────────────────────────────────
+    MAIL_NOT_MATCH(HttpStatus.BAD_REQUEST, "이메일이 일치하지 않습니다."),
+    INVALID_RESET_CODE(HttpStatus.BAD_REQUEST, "유효하지 않은 인증코드입니다."),
+    RESET_CODE_EXPIRED(HttpStatus.BAD_REQUEST, "인증코드가 만료되었습니다. 다시 요청해 주세요."),
+
+    // ── 이메일 인증 ────────────────────────────────────────
+    INVALID_EMAIL_CODE(HttpStatus.BAD_REQUEST, "유효하지 않은 인증코드입니다."),
+    EMAIL_CODE_EXPIRED(HttpStatus.BAD_REQUEST, "인증코드가 만료되었습니다. 다시 요청해 주세요."),
     MAIL_SEND_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "이메일 발송에 실패했습니다.")
 }
