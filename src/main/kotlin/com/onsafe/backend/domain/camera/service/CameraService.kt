@@ -5,14 +5,14 @@ import com.onsafe.backend.common.exception.ErrorCode
 import com.onsafe.backend.domain.camera.model.dto.CameraUrlRequest
 import com.onsafe.backend.domain.camera.model.dto.RiskScoreResponse
 import com.onsafe.backend.domain.camera.model.dto.RiskStatusResponse
+import com.onsafe.backend.domain.camera.repository.DeviceRepository
 import com.onsafe.backend.domain.camera.repository.RealtimeDataRepository
-import com.onsafe.backend.domain.user.repository.UserRepository
 import org.springframework.stereotype.Service
 
 @Service
 class CameraService(
     private val realtimeDataRepository: RealtimeDataRepository,
-    private val userRepository: UserRepository
+    private val deviceRepository: DeviceRepository
 ) {
 
     suspend fun getRiskScore(userId: String): RiskScoreResponse {
@@ -38,22 +38,17 @@ class CameraService(
         )
     }
 
-    suspend fun getCameraUrl(userId: String): String {
-        val user = userRepository.findByUserId(userId)
-            ?: throw BusinessException(ErrorCode.USER_NOT_FOUND)
-        return user.cameraUrl ?: throw BusinessException(ErrorCode.CAMERA_NOT_FOUND)
-    }
+    suspend fun getCameraUrl(userId: String): String =
+        deviceRepository.findCameraUrlByUserId(userId)
+            ?: throw BusinessException(ErrorCode.CAMERA_NOT_FOUND)
 
-    suspend fun updateCameraUrl(userId: String, request: CameraUrlRequest) {
-        val user = userRepository.findByUserId(userId)
-            ?: throw BusinessException(ErrorCode.USER_NOT_FOUND)
-        userRepository.save(user.copy(cameraUrl = request.cameraUrl))
-    }
+    suspend fun updateCameraUrl(deviceId: String, request: CameraUrlRequest) =
+        deviceRepository.updateCameraUrl(deviceId, request.cameraUrl)
 
-    private fun colorCodeOf(level: String) = when (level) {
-        "위험" -> "#FF0000"
-        "주의" -> "#FFA500"
-        else   -> "#00C853"
+    private fun colorCodeOf(level: String) = when (level.lowercase()) {
+        "위험", "danger", "high" -> "#FF0000"
+        "주의", "warning", "medium" -> "#FFA500"
+        else -> "#00C853"
     }
 
     companion object {

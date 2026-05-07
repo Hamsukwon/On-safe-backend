@@ -36,12 +36,12 @@ class CameraController(private val cameraService: CameraService) {
     }
 
     @Operation(summary = "카메라 URL 등록/수정", security = [SecurityRequirement(name = "BearerAuth")])
-    @PutMapping("/url/{userId}")
+    @PutMapping("/url/{deviceId}")
     suspend fun updateCameraUrl(
-        @PathVariable userId: String,
+        @PathVariable deviceId: String,
         @Valid @RequestBody request: CameraUrlRequest
     ): ApiResponse<Unit> {
-        cameraService.updateCameraUrl(userId, request)
+        cameraService.updateCameraUrl(deviceId, request)
         return ApiResponse.ok(message = "카메라 URL이 업데이트되었습니다.")
     }
 }
