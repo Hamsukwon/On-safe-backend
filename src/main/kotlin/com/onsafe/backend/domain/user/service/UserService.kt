@@ -2,6 +2,7 @@ package com.onsafe.backend.domain.user.service
 
 import com.onsafe.backend.common.exception.BusinessException
 import com.onsafe.backend.common.exception.ErrorCode
+import com.onsafe.backend.domain.settings.repository.SettingsRepository
 import com.onsafe.backend.domain.user.model.dto.UserResponse
 import com.onsafe.backend.domain.user.model.dto.UserUpdateRequest
 import com.onsafe.backend.domain.user.repository.UserRepository
@@ -11,6 +12,7 @@ import org.springframework.stereotype.Service
 @Service
 class UserService(
     private val userRepository: UserRepository,
+    private val settingsRepository: SettingsRepository,
     private val passwordEncoder: PasswordEncoder
 ) {
 
@@ -37,5 +39,6 @@ class UserService(
             throw BusinessException(ErrorCode.USER_NOT_FOUND)
         }
         userRepository.deleteByUserId(userId)
+        settingsRepository.deleteByUserId(userId)
     }
 }

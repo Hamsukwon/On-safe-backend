@@ -3,7 +3,6 @@
 - stream: JPEG 프레임 수신 → AI 추론 → 낙상 시 Firestore 저장 + FCM 발송
 - score: Redis에서 현재 위험 점수 조회
 - status / url: Firestore devices 컬렉션 조회
-- confirm: fall_logs.is_confirmed 업데이트
 """
 import uuid
 from datetime import datetime, timezone
@@ -15,7 +14,7 @@ from app.core.exceptions import not_found
 from app.core.firebase import get_firestore, send_fcm
 from app.domain.camera.schemas import (
     StreamResponse, ScoreResponse, StatusResponse,
-    CameraUrlResponse, ConfirmResponse,
+    CameraUrlResponse,
 )
 
 _DEVICES = "devices"
@@ -54,7 +53,7 @@ async def process_stream(jpeg_bytes: bytes, user_id: str, device_id: str) -> Str
 
     log_id: str | None = None
     if score >= 80 or fall:
-        log_id = await _save_fall_log(user_id, device_id, score)
+        log_id = await _save_detection_log(user_id, device_id, score)
         await _send_fall_fcm(user_id, log_id, score)
 
     return StreamResponse(score=score, fall=fall, log_id=log_id)
@@ -99,7 +98,7 @@ async def _save_realtime_data(user_id: str, features: dict, score: float) -> Non
         await doc.reference.delete()
 
 
-async def _save_fall_log(user_id: str, device_id: str, score: float) -> str:
+async def _save_detection_log(user_id: str, device_id: str, score: float) -> str:
     db = get_firestore()
     log_id = str(uuid.uuid4())
     await db.collection(_FALL_LOGS).document(log_id).set({
@@ -162,11 +161,3 @@ async def get_camera_url(device_id: str) -> CameraUrlResponse:
     return CameraUrlResponse(device_id=device_id, camera_url=d.get("camera_url"))
 
 
-async def confirm_fall_log(log_id: str) -> ConfirmResponse:
-    db = get_firestore()
-    doc_ref = db.collection(_FALL_LOGS).document(log_id)
-    doc = await doc_ref.get()
-    if not doc.exists:
-        raise not_found("낙상 로그를 찾을 수 없습니다")
-    await doc_ref.update({"is_confirmed": True})
-    return ConfirmResponse(log_id=log_id, is_confirmed=True)

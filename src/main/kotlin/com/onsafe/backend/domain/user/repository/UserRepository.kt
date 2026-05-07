@@ -47,7 +47,7 @@ class UserRepository(private val firestore: Firestore) {
         wardName = getString("ward_name") ?: "",
         mail = getString("mail") ?: "",
         address = getString("address"),
-        cameraUrl = getString("camera_url"),
+        addressDetail = getString("address_detail"),
         fcmToken = getString("fcm_token"),
         createdAt = getTimestamp("created_at")?.toLocalDateTime() ?: LocalDateTime.now()
     )
@@ -59,7 +59,7 @@ class UserRepository(private val firestore: Firestore) {
         "ward_name" to wardName,
         "mail" to mail,
         "address" to address,
-        "camera_url" to cameraUrl,
+        "address_detail" to addressDetail,
         "fcm_token" to fcmToken,
         "created_at" to createdAt.toTimestamp()
     )

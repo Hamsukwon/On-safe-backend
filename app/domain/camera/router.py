@@ -3,7 +3,7 @@ from app.core.deps import get_current_user_id
 from app.domain.camera import service
 from app.domain.camera.schemas import (
     StreamResponse, ScoreResponse, StatusResponse,
-    CameraUrlResponse, ConfirmResponse,
+    CameraUrlResponse,
 )
 
 router = APIRouter(prefix="/api/camera", tags=["Camera"])
@@ -44,9 +44,3 @@ async def get_camera_url(
     return await service.get_camera_url(device_id)
 
 
-@router.patch("/fall-logs/{log_id}/confirm")
-async def confirm_fall_log(
-    log_id: str,
-    _: str = Depends(get_current_user_id),
-) -> ConfirmResponse:
-    return await service.confirm_fall_log(log_id)

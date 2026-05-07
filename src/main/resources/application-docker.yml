@@ -1,2 +1,8 @@
 firebase:
   credentials: /app/secrets/serviceAccountKey.json
+
+spring:
+  data:
+    redis:
+      host: redis
+      port: 6379

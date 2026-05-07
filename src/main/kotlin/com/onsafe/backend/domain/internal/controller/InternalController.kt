@@ -1,8 +1,7 @@
 package com.onsafe.backend.domain.internal.controller
 
 import com.onsafe.backend.common.response.ApiResponse
-import com.onsafe.backend.domain.internal.model.dto.ReportFallRequest
-import com.onsafe.backend.domain.internal.model.dto.SaveDetectionLogRequest
+import com.onsafe.backend.domain.internal.model.dto.SaveFallLogRequest
 import com.onsafe.backend.domain.internal.model.dto.UpdateRealtimeRequest
 import com.onsafe.backend.domain.internal.service.InternalService
 import io.swagger.v3.oas.annotations.Operation
@@ -23,17 +22,10 @@ class InternalController(private val internalService: InternalService) {
         return ApiResponse.ok("실시간 데이터 업데이트 완료")
     }
 
-    @Operation(summary = "낙상 감지 보고 + FCM 발송 (AI 서버 전용)", security = [])
-    @PostMapping("/fall")
-    suspend fun reportFall(@RequestBody req: ReportFallRequest): ApiResponse<Unit> {
-        internalService.reportFall(req)
-        return ApiResponse.ok("낙상 이벤트 저장 및 알림 발송 완료")
-    }
-
-    @Operation(summary = "감지 로그 저장 (AI 서버 전용)", security = [])
-    @PostMapping("/detection-log")
-    suspend fun saveDetectionLog(@RequestBody req: SaveDetectionLogRequest): ApiResponse<Unit> {
-        internalService.saveDetectionLog(req)
-        return ApiResponse.ok("감지 로그 저장 완료")
+    @Operation(summary = "낙상 로그 저장 + fall=true 시 FCM 발송 (AI 서버 전용)", security = [])
+    @PostMapping("/fall-log")
+    suspend fun saveFallLog(@RequestBody req: SaveFallLogRequest): ApiResponse<Unit> {
+        internalService.saveFallLog(req)
+        return ApiResponse.ok("낙상 로그 저장 완료")
     }
 }

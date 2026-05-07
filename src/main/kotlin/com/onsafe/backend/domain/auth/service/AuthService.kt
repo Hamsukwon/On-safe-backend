@@ -1,18 +1,20 @@
 package com.onsafe.backend.domain.auth.service
 
-import com.google.cloud.firestore.Firestore
 import com.onsafe.backend.common.exception.BusinessException
 import com.onsafe.backend.common.exception.ErrorCode
 import com.onsafe.backend.common.security.JwtProvider
-import com.onsafe.backend.common.util.await
-import com.onsafe.backend.common.util.toLocalDateTime
-import com.onsafe.backend.common.util.toTimestamp
 import com.onsafe.backend.domain.auth.model.dto.*
 import com.onsafe.backend.domain.user.model.entity.User
 import com.onsafe.backend.domain.user.repository.UserRepository
+import kotlinx.coroutines.reactive.awaitFirstOrNull
+import kotlinx.coroutines.reactor.awaitSingle
+import org.springframework.data.redis.core.ReactiveStringRedisTemplate
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
-import java.time.LocalDateTime
+import java.time.Duration
+
+private const val EMAIL_CODE_TTL = 180L   // 3분
+private const val RESET_CODE_TTL = 180L   // 3분
 
 @Service
 class AuthService(
@@ -20,11 +22,8 @@ class AuthService(
     private val passwordEncoder: PasswordEncoder,
     private val jwtProvider: JwtProvider,
     private val emailService: EmailService,
-    private val firestore: Firestore
+    private val redis: ReactiveStringRedisTemplate
 ) {
-
-    private val resetCodes get() = firestore.collection("password_reset_codes")
-    private val emailCodes get() = firestore.collection("email_verify_codes")
 
     suspend fun checkId(request: CheckIdRequest) {
         if (userRepository.existsByUserId(request.userId)) {
@@ -34,27 +33,18 @@ class AuthService(
 
     suspend fun sendEmailCode(request: SendEmailCodeRequest) {
         val code = (100000..999999).random().toString()
-        val expiresAt = LocalDateTime.now().plusMinutes(3)
-
-        emailCodes.document(request.mail).set(
-            mapOf("code" to code, "expires_at" to expiresAt.toTimestamp())
-        ).await()
-
+        redis.opsForValue()
+            .set("email_verify:${request.mail}", code, Duration.ofSeconds(EMAIL_CODE_TTL))
+            .awaitSingle()
         emailService.sendEmailVerificationCode(request.mail, code)
     }
 
     suspend fun verifyEmailCode(request: VerifyEmailCodeRequest) {
-        val doc = emailCodes.document(request.mail).get().await()
-        if (!doc.exists()) throw BusinessException(ErrorCode.INVALID_EMAIL_CODE)
-
-        val expiresAt = doc.getTimestamp("expires_at")?.toLocalDateTime()
+        val key = "email_verify:${request.mail}"
+        val storedCode = redis.opsForValue().get(key).awaitFirstOrNull()
             ?: throw BusinessException(ErrorCode.INVALID_EMAIL_CODE)
-        if (LocalDateTime.now().isAfter(expiresAt)) throw BusinessException(ErrorCode.EMAIL_CODE_EXPIRED)
-
-        val storedCode = doc.getString("code") ?: throw BusinessException(ErrorCode.INVALID_EMAIL_CODE)
         if (storedCode != request.code) throw BusinessException(ErrorCode.INVALID_EMAIL_CODE)
-
-        emailCodes.document(request.mail).delete().await()
+        redis.delete(key).awaitSingle()
     }
 
     suspend fun sendResetCode(request: SendResetCodeRequest) {
@@ -63,27 +53,18 @@ class AuthService(
         if (user.mail != request.mail) throw BusinessException(ErrorCode.MAIL_NOT_MATCH)
 
         val code = (100000..999999).random().toString()
-        val expiresAt = LocalDateTime.now().plusMinutes(3)
-
-        resetCodes.document(request.userId).set(
-            mapOf("code" to code, "expires_at" to expiresAt.toTimestamp())
-        ).await()
-
+        redis.opsForValue()
+            .set("reset_code:${request.userId}", code, Duration.ofSeconds(RESET_CODE_TTL))
+            .awaitSingle()
         emailService.sendResetCode(request.mail, code)
     }
 
     suspend fun verifyResetCode(request: VerifyResetCodeRequest) {
-        val doc = resetCodes.document(request.userId).get().await()
-        if (!doc.exists()) throw BusinessException(ErrorCode.INVALID_RESET_CODE)
-
-        val expiresAt = doc.getTimestamp("expires_at")?.toLocalDateTime()
+        val key = "reset_code:${request.userId}"
+        val storedCode = redis.opsForValue().get(key).awaitFirstOrNull()
             ?: throw BusinessException(ErrorCode.INVALID_RESET_CODE)
-        if (LocalDateTime.now().isAfter(expiresAt)) throw BusinessException(ErrorCode.RESET_CODE_EXPIRED)
-
-        val storedCode = doc.getString("code") ?: throw BusinessException(ErrorCode.INVALID_RESET_CODE)
         if (storedCode != request.code) throw BusinessException(ErrorCode.INVALID_RESET_CODE)
-
-        resetCodes.document(request.userId).delete().await()
+        redis.delete(key).awaitSingle()
     }
 
     suspend fun register(request: RegisterRequest) {
