@@ -38,6 +38,8 @@ class CameraSessionService(
             "${PREFIX}${userId}:status",
             "${PREFIX}${userId}:started_at"
         ).awaitSingle()
+        // 연결 중인 WebSocket 클라이언트에게 종료 신호 발행
+        redisTemplate.convertAndSend("camera:control:$userId", "STOP").awaitSingle()
     }
 
     suspend fun getSessionStatus(userId: String): CameraSessionResponse {
@@ -56,5 +58,10 @@ class CameraSessionService(
     // WebSocket 핸들러가 첫 프레임 수신 시 호출 → CONNECTING → LIVE
     suspend fun markLive(userId: String) {
         redisTemplate.opsForValue().set("${PREFIX}${userId}:status", CameraSessionStatus.LIVE.name, TTL).awaitSingle()
+    }
+
+    // WebSocket 연결 종료 시 호출 → LIVE → STANDBY (세션 키 보존, 상태만 변경)
+    suspend fun markStandby(userId: String) {
+        redisTemplate.opsForValue().set("${PREFIX}${userId}:status", CameraSessionStatus.STANDBY.name, TTL).awaitSingle()
     }
 }

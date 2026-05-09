@@ -37,6 +37,9 @@ services:
       MAIL_PASSWORD: ${MAIL_PASSWORD:-}
     volumes:
       - ./serviceAccountKey.json:/app/secrets/serviceAccountKey.json:ro
+    depends_on:
+      redis:
+        condition: service_healthy
     networks:
       - onsafe-network
     restart: unless-stopped
