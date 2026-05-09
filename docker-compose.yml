@@ -56,6 +56,21 @@ services:
       - onsafe-network
     restart: unless-stopped
 
+  # ── mediamtx (에뮬레이터 테스트용 RTSP 서버) ────────────────────────────────
+  # 로컬 영상 파일을 RTSP로 스트리밍해 Python AI 서버의 카메라 소스로 사용
+  # 프로덕션에서는 제거하거나 profiles: [test] 로 격리
+  rtsp-server:
+    image: bluenviron/mediamtx:latest
+    container_name: onsafe-rtsp-server
+    ports:
+      - "8554:8554"   # RTSP
+      - "8888:8888"   # HLS (선택)
+    environment:
+      MTX_LOGLEVEL: warn
+    networks:
+      - onsafe-network
+    restart: unless-stopped
+
 networks:
   onsafe-network:
     driver: bridge
