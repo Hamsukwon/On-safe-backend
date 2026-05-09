@@ -24,8 +24,7 @@ class SecurityConfig(
         "/swagger-ui.html",
         "/api-docs/**",
         "/webjars/**",
-        "/internal/**",
-        "/ws/camera/**"  // WebSocket 업그레이드 요청 — JWT 검증 없이 연결 수립
+        "/internal/**"
     )
 
     @Bean

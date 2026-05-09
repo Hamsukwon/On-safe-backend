@@ -80,7 +80,6 @@ class AuthService(
                 password = passwordEncoder.encode(request.password),
                 name = request.name,
                 phone = request.phone,
-                wardName = "",
                 mail = request.mail,
                 address = request.address,
                 addressDetail = request.addressDetail

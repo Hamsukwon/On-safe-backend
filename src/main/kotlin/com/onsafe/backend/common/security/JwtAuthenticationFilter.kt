@@ -1,6 +1,7 @@
 package com.onsafe.backend.common.security
 
 import org.springframework.http.HttpHeaders
+import org.springframework.http.HttpStatus
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.core.context.ReactiveSecurityContextHolder
@@ -29,7 +30,16 @@ class JwtAuthenticationFilter(private val jwtProvider: JwtProvider) : WebFilter 
 
         val userId = jwtProvider.getUserId(token)
 
-        // principal에 userId(Long)를 넣어두면 컨트롤러에서 @AuthenticationPrincipal로 꺼낼 수 있음
+        // WebSocket 경로(/ws/camera/{userId}): 토큰 userId와 경로 userId 불일치 시 HTTP 레벨에서 403 차단
+        val path = exchange.request.path.value()
+        if (path.startsWith("/ws/camera/")) {
+            val pathUserId = path.substringAfterLast("/")
+            if (userId != pathUserId) {
+                exchange.response.statusCode = HttpStatus.FORBIDDEN
+                return exchange.response.setComplete()
+            }
+        }
+
         val auth = UsernamePasswordAuthenticationToken(
             userId, null, listOf(SimpleGrantedAuthority("ROLE_USER"))
         )
@@ -38,9 +48,12 @@ class JwtAuthenticationFilter(private val jwtProvider: JwtProvider) : WebFilter 
             .contextWrite(ReactiveSecurityContextHolder.withAuthentication(auth))
     }
 
-    // "Bearer " 접두사 제거 후 순수 토큰 문자열만 반환
-    private fun extractToken(exchange: ServerWebExchange): String? =
-        exchange.request.headers.getFirst(HttpHeaders.AUTHORIZATION)
+    // Authorization 헤더 우선, 없으면 ?token= 쿼리 파라미터 (WebSocket 업그레이드 요청용)
+    private fun extractToken(exchange: ServerWebExchange): String? {
+        val headerToken = exchange.request.headers.getFirst(HttpHeaders.AUTHORIZATION)
             ?.takeIf { it.startsWith("Bearer ") }
             ?.removePrefix("Bearer ")
+        if (headerToken != null) return headerToken
+        return exchange.request.queryParams.getFirst("token")
+    }
 }
