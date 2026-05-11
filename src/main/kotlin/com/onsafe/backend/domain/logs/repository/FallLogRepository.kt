@@ -18,6 +18,7 @@ class FallLogRepository(private val firestore: Firestore) {
     suspend fun findRecentByUserId(userId: String): List<FallLog> {
         val snap = col.whereEqualTo("user_id", userId)
             .orderBy("timestamp", Query.Direction.DESCENDING)
+            .limit(100)
             .get().await()
         return snap.documents.map { it.toFallLog() }
     }
