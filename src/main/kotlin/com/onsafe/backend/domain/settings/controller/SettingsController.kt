@@ -28,9 +28,8 @@ class SettingsController(private val settingsService: SettingsService) {
     suspend fun updateNotifications(
         @PathVariable userId: String,
         @RequestBody request: NotificationSettingsRequest
-    ): ApiResponse<Unit> {
-        settingsService.updateNotifications(userId, request)
-        return ApiResponse.ok(message = "알림 설정 변경 완료")
+    ): ApiResponse<NotificationSettingsResponse> {
+        return ApiResponse.ok(settingsService.updateNotifications(userId, request), "알림 설정 변경 완료")
     }
 
     @Operation(summary = "로그 보관 기간 조회", security = [SecurityRequirement(name = "BearerAuth")])

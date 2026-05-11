@@ -22,12 +22,8 @@ class FallLogRepository(private val firestore: Firestore) {
         return snap.documents.map { it.toFallLog() }
     }
 
-    suspend fun findByLogIdAndUserId(logId: String, userId: String): FallLog? {
-        val doc = col.document(logId).get().await()
-        if (!doc.exists()) return null
-        val log = doc.toFallLog()
-        return if (log.userId == userId) log else null
-    }
+    suspend fun findByLogIdAndUserId(logId: String, userId: String): FallLog? =
+        getDocIfOwned(logId, userId)?.toFallLog()
 
     suspend fun save(log: FallLog): FallLog {
         col.document(log.logId).set(log.toMap()).await()
@@ -35,17 +31,20 @@ class FallLogRepository(private val firestore: Firestore) {
     }
 
     suspend fun confirmByLogIdAndUserId(logId: String, userId: String): FallLog? {
-        val doc = col.document(logId).get().await()
-        if (!doc.exists() || doc.getString("user_id") != userId) return null
+        val doc = getDocIfOwned(logId, userId) ?: return null
         col.document(logId).update("is_confirmed", true).await()
         return doc.toFallLog().copy(isConfirmed = true)
     }
 
     suspend fun deleteByLogIdAndUserId(logId: String, userId: String): Long {
-        val doc = col.document(logId).get().await()
-        if (!doc.exists() || doc.getString("user_id") != userId) return 0L
+        getDocIfOwned(logId, userId) ?: return 0L
         col.document(logId).delete().await()
         return 1L
+    }
+
+    private suspend fun getDocIfOwned(logId: String, userId: String): DocumentSnapshot? {
+        val doc = col.document(logId).get().await()
+        return if (doc.exists() && doc.getString("user_id") == userId) doc else null
     }
 
     private fun DocumentSnapshot.toFallLog() = FallLog(
