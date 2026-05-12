@@ -25,22 +25,22 @@ class JwtAuthenticationFilter(
 
         val userId = jwtProvider.getUserId(token)
 
-        // WebSocket 경로(/ws/camera/{userId}): 토큰 userId와 경로 userId 불일치 시 HTTP 레벨에서 403 차단
-        val path = exchange.request.path.value()
-        if (path.startsWith("/ws/camera/")) {
-            val pathUserId = path.substringAfterLast("/")
-            if (userId != pathUserId) {
-                exchange.response.statusCode = HttpStatus.FORBIDDEN
-                return exchange.response.setComplete()
-            }
-        }
-
+        // 블랙리스트 체크를 경로 체크보다 먼저 수행 — 폐기 토큰은 401, 경로 불일치는 403
         return redis.opsForValue().get("bl:$token")
             .defaultIfEmpty("")
             .flatMap { blacklisted ->
                 if (blacklisted.isNotEmpty()) {
                     chain.filter(exchange)
                 } else {
+                    // WebSocket 경로(/ws/camera/{userId}): 토큰 userId와 경로 userId 불일치 시 403 차단
+                    val path = exchange.request.path.value()
+                    if (path.startsWith("/ws/camera/")) {
+                        val pathUserId = path.substringAfterLast("/")
+                        if (userId != pathUserId) {
+                            exchange.response.statusCode = HttpStatus.FORBIDDEN
+                            return@flatMap exchange.response.setComplete()
+                        }
+                    }
                     val auth = UsernamePasswordAuthenticationToken(
                         userId, null, listOf(SimpleGrantedAuthority("ROLE_USER"))
                     )
