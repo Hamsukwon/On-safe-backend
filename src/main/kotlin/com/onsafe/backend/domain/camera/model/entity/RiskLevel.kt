@@ -6,8 +6,8 @@ enum class RiskLevel(val label: String, val colorCode: String) {
     NORMAL("정상", "#00C853");
 
     companion object {
-        private const val DANGER_THRESHOLD = 0.7f
-        private const val WARNING_THRESHOLD = 0.4f
+        private const val DANGER_THRESHOLD = 75f
+        private const val WARNING_THRESHOLD = 50f
 
         fun fromScore(score: Float) = when {
             score > DANGER_THRESHOLD -> DANGER

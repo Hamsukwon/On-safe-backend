@@ -1,25 +1,25 @@
 """
 카메라 서비스
-- stream: JPEG 프레임 수신 → AI 추론 → 낙상 시 Firestore 저장 + FCM 발송
+- stream: JPEG 프레임 수신 → AI 추론 → Kotlin internal API로 realtime/fall-log 위임
 - score: Redis에서 현재 위험 점수 조회
 - status / url: Firestore devices 컬렉션 조회
 """
 import uuid
 from datetime import datetime, timezone
 
+import httpx
 from google.cloud.firestore_v1.base_query import FieldFilter
 from app.ai.buffer import push_frame_count, should_infer, save_score, get_score, save_latest_frame
 from app.ai.engine import infer_frame_async
+from app.core.config import settings
 from app.core.exceptions import not_found
-from app.core.firebase import get_firestore, send_fcm
+from app.core.firebase import get_firestore
 from app.domain.camera.schemas import (
     StreamResponse, ScoreResponse, StatusResponse,
     CameraUrlResponse,
 )
 
 _DEVICES = "devices"
-_FALL_LOGS = "fall_logs"
-_USERS = "users"
 
 
 _REALTIME = "realtime_data"
@@ -27,9 +27,9 @@ _REALTIME_LIMIT = 2000
 
 
 def _score_level(score: float) -> str:
-    if score >= 80:
+    if score >= 76:
         return "위험"
-    if score >= 50:
+    if score >= 51:
         return "주의"
     return "정상"
 
@@ -50,11 +50,11 @@ async def process_stream(jpeg_bytes: bytes, user_id: str, device_id: str) -> Str
 
     await save_score(user_id, score, level)
     await _save_realtime_data(user_id, features, score)
+    await _update_realtime(user_id, score, level)
 
     log_id: str | None = None
-    if score >= 80 or fall:
-        log_id = await _save_detection_log(user_id, device_id, score)
-        await _send_fall_fcm(user_id, log_id, score)
+    if score >= 76 or fall:
+        log_id = await _save_fall_log(user_id, device_id, score, fall)
 
     return StreamResponse(score=score, fall=fall, log_id=log_id)
 
@@ -90,46 +90,48 @@ async def _save_realtime_data(user_id: str, features: dict, score: float) -> Non
     col = db.collection(_REALTIME)
     await col.add(data)
 
-    # 최신 2000개 유지
-    old_docs = await col.where(filter=FieldFilter("user_id", "==", user_id)) \
-        .order_by("timestamp", direction="DESCENDING") \
-        .offset(_REALTIME_LIMIT).get()
-    for doc in old_docs:
-        await doc.reference.delete()
-
-
-async def _save_detection_log(user_id: str, device_id: str, score: float) -> str:
-    db = get_firestore()
-    log_id = str(uuid.uuid4())
-    await db.collection(_FALL_LOGS).document(log_id).set({
-        "log_id": log_id,
-        "device_id": device_id,
-        "user_id": user_id,
-        "score": score,
-        "fall": True,
-        "is_confirmed": False,
-        "timestamp": datetime.now(timezone.utc),
-    })
-    return log_id
-
-
-async def _send_fall_fcm(user_id: str, log_id: str, score: float) -> None:
-    db = get_firestore()
-    doc = await db.collection(_USERS).document(user_id).get()
-    if not doc.exists:
-        return
-    fcm_token = doc.to_dict().get("fcm_token")
-    if not fcm_token:
-        return
+    # 최신 2000개 유지 — 복합 인덱스(user_id ASC, timestamp DESC) 필요
     try:
-        send_fcm(
-            token=fcm_token,
-            title="낙상 감지 경보",
-            body="낙상이 감지되었습니다. 즉시 확인하세요.",
-            data={"log_id": log_id, "score": str(score)},
-        )
+        old_docs = await col.where(filter=FieldFilter("user_id", "==", user_id)) \
+            .order_by("timestamp", direction="DESCENDING") \
+            .offset(_REALTIME_LIMIT).get()
+        for doc in old_docs:
+            await doc.reference.delete()
     except Exception as e:
-        print(f"[camera.service] FCM 전송 오류: {e}")
+        print(f"[camera.service] realtime_data 정리 오류 (Firestore 복합 인덱스 미생성): {e}")
+
+
+async def _update_realtime(user_id: str, score: float, level: str) -> None:
+    try:
+        async with httpx.AsyncClient() as client:
+            await client.post(
+                f"{settings.kotlin_internal_base}/internal/realtime",
+                json={"user_id": user_id, "score": score, "level": level},
+                timeout=3.0,
+            )
+    except Exception as e:
+        print(f"[camera.service] /internal/realtime 호출 오류: {e}")
+
+
+async def _save_fall_log(user_id: str, device_id: str, score: float, fall: bool) -> str:
+    log_id = str(uuid.uuid4())
+    try:
+        async with httpx.AsyncClient() as client:
+            await client.post(
+                f"{settings.kotlin_internal_base}/internal/fall-log",
+                json={
+                    "log_id": log_id,
+                    "device_id": device_id,
+                    "user_id": user_id,
+                    "score": score,
+                    "fall": fall,
+                    "is_confirmed": False,
+                },
+                timeout=3.0,
+            )
+    except Exception as e:
+        print(f"[camera.service] /internal/fall-log 호출 오류: {e}")
+    return log_id
 
 
 async def get_score_for_user(user_id: str) -> ScoreResponse:

@@ -12,6 +12,7 @@ services:
       REDIS_URL: redis://redis:6379
       FIREBASE_CREDENTIALS: /app/secrets/serviceAccountKey.json
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      KOTLIN_INTERNAL_BASE: http://kotlin-api:8080
     volumes:
       - ./serviceAccountKey.json:/app/secrets/serviceAccountKey.json:ro
     depends_on:

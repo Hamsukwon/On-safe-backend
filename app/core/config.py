@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     jwt_secret: str = "change-me-to-a-32-char-secret-key"
     jwt_access_expiry: int = 3600
     jwt_refresh_expiry: int = 604800
+    kotlin_internal_base: str = "http://localhost:8080"
 
     model_config = {"env_file": ".env"}
 
