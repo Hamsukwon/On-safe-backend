@@ -1,6 +1,8 @@
 package com.onsafe.backend.domain.user.controller
 
 import com.onsafe.backend.common.response.ApiResponse
+import com.onsafe.backend.domain.auth.model.dto.FcmTokenRequest
+import com.onsafe.backend.domain.auth.service.AuthService
 import com.onsafe.backend.domain.user.model.dto.UserResponse
 import com.onsafe.backend.domain.user.model.dto.UserUpdateRequest
 import com.onsafe.backend.domain.user.service.UserService
@@ -12,8 +14,11 @@ import org.springframework.web.bind.annotation.*
 
 @Tag(name = "User", description = "사용자 관련 API")
 @RestController
-@RequestMapping("/api/user")
-class UserController(private val userService: UserService) {
+@RequestMapping("/api/users")
+class UserController(
+    private val userService: UserService,
+    private val authService: AuthService
+) {
 
     @Operation(summary = "사용자 정보 조회", security = [SecurityRequirement(name = "BearerAuth")])
     @GetMapping("/{userId}")
@@ -28,6 +33,16 @@ class UserController(private val userService: UserService) {
         @Valid @RequestBody request: UserUpdateRequest
     ): ApiResponse<UserResponse> {
         return ApiResponse.ok(userService.updateUser(userId, request), "개인정보가 수정되었습니다.")
+    }
+
+    @Operation(summary = "FCM 토큰 등록/갱신", security = [SecurityRequirement(name = "BearerAuth")])
+    @PutMapping("/{userId}/fcm-token")
+    suspend fun updateFcmToken(
+        @PathVariable userId: String,
+        @RequestBody request: FcmTokenRequest
+    ): ApiResponse<Unit> {
+        authService.updateFcmToken(request.copy(userId = userId))
+        return ApiResponse.ok(message = "FCM 토큰 등록 완료")
     }
 
     @Operation(summary = "회원 탈퇴", security = [SecurityRequirement(name = "BearerAuth")])
