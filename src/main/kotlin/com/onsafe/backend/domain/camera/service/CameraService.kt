@@ -3,6 +3,7 @@ package com.onsafe.backend.domain.camera.service
 import com.onsafe.backend.common.exception.BusinessException
 import com.onsafe.backend.common.exception.ErrorCode
 import com.onsafe.backend.domain.camera.model.dto.CameraUrlRequest
+import com.onsafe.backend.domain.camera.model.dto.DeviceResponse
 import com.onsafe.backend.domain.camera.model.dto.RiskScoreResponse
 import com.onsafe.backend.domain.camera.model.dto.RiskStatusResponse
 import com.onsafe.backend.domain.camera.model.entity.RiskLevel
@@ -38,6 +39,9 @@ class CameraService(
             colorCode = risk.colorCode
         )
     }
+
+    suspend fun getDevices(userId: String): List<DeviceResponse> =
+        deviceRepository.findAllByUserId(userId)
 
     suspend fun getCameraUrl(userId: String): String =
         deviceRepository.findCameraUrlByUserId(userId)

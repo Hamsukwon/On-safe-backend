@@ -141,8 +141,12 @@
   "success": true,
   "message": "낙상 이벤트를 확인 처리했습니다.",
   "data": {
-    "log_id": "uuid-1234",
-    "is_confirmed": true
+    "log_id": "uuid-1234", "device_id": "device_001",
+    "user_id": "user001",
+    "score": 87.5,
+    "fall": true,
+    "is_confirmed": true,
+    "timestamp": "2026-05-17T14:23:00"
   }
 }
 ```
@@ -156,6 +160,7 @@
 | 메서드 | `GET` |
 | 경로 | `/api/settings/notifications/{userId}` |
 | 인증 | `Authorization: Bearer {token}` |
+| 비고 | 토큰의 userId와 경로의 userId가 다를 경우 403 반환 |
 
 **응답 예시**
 ```json
@@ -185,12 +190,25 @@
 | 메서드 | `PUT` |
 | 경로 | `/api/settings/notifications/{userId}` |
 | 인증 | `Authorization: Bearer {token}` |
+| 비고 | 토큰의 userId와 경로의 userId가 다를 경우 403 반환 |
 
 **요청 body**
 ```json
 {
   "notification_enabled": true,
   "fall_sensitivity": "medium"
+}
+```
+
+**응답 예시**
+```json
+{
+  "success": true,
+  "message": "알림 설정 변경 완료",
+  "data": {
+    "notification_enabled": true,
+    "fall_sensitivity": "medium"
+  }
 }
 ```
 
@@ -203,6 +221,7 @@
 | 메서드 | `GET` |
 | 경로 | `/api/settings/retention/{userId}` |
 | 인증 | `Authorization: Bearer {token}` |
+| 비고 | 토큰의 userId와 경로의 userId가 다를 경우 403 반환 |
 
 **응답 예시**
 ```json
@@ -223,11 +242,23 @@
 | 메서드 | `PUT` |
 | 경로 | `/api/settings/retention/{userId}` |
 | 인증 | `Authorization: Bearer {token}` |
+| 비고 | 토큰의 userId와 경로의 userId가 다를 경우 403 반환 |
 
 **요청 body**
 ```json
 {
   "retention_days": 30
+}
+```
+
+**응답 예시**
+```json
+{
+  "success": true,
+  "message": "영상 보관 기간이 설정되었습니다.",
+  "data": {
+    "retention_days": 30
+  }
 }
 ```
 

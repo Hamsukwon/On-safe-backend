@@ -1,5 +1,86 @@
 # Changelog
 
+## [Unreleased] - feature/parent-main
+
+---
+
+### 2026-05-17 — Firebase Storage 썸네일 파이프라인 (#5~#7)
+
+**변경 파일:** `app/core/storage.py` (신규), `app/core/config.py`, `app/core/firebase.py`, `app/domain/camera/service.py`, `StorageService.kt` (신규), `FallLog.kt`, `FallLogResponse.kt`, `SaveFallLogRequest.kt`, `InternalService.kt`, `FallLogRepository.kt`, `FallLogController.kt`, `FallLogService.kt`, `ErrorCode.kt`, `application.yml`, `application-docker.yml`, `.env`, `.env.example`, `docker-compose.yml`
+
+#### Added
+- **`app/core/storage.py`**: Firebase Storage 업로드 추상화 레이어. `upload_thumbnail(log_id, jpeg_bytes)` → GCS 경로(`fall-thumbnails/{logId}.jpg`) 반환. AWS S3 마이그레이션 시 이 모듈 내부만 교체하면 됨
+- **`StorageService.kt`** (`common/storage`): GCS V4 Signed URL 발급 서비스. `ServiceAccountCredentials`로 인증하며 기본 1시간 유효
+- **`FallLogController`** — `GET /api/fall-logs/{userId}/{logId}/thumbnail`: signed URL JSON 응답
+- **`FallLogController`** — `GET /api/fall-logs/{userId}/{logId}/download`: signed URL로 302 리다이렉트
+- **`ErrorCode.THUMBNAIL_NOT_FOUND`**: 썸네일 없는 로그 요청 시 404 반환
+- **`scripts/setup_storage.py`**: GCS Lifecycle(30일 자동 삭제) + CORS 설정 스크립트 (gsutil/firebase CLI 불필요)
+- **`scripts/test_storage_api.py`**: Storage API 통합 테스트 스크립트 (register → login → insert FallLog → thumbnail → download 흐름)
+- **`gcs-lifecycle.json`**: fall-thumbnails/ 30일 자동 삭제 Lifecycle 정책
+- **`storage.rules`**: Firebase Storage 보안 규칙 (서비스 계정 접근 전용)
+- **`docs/storage-operational-analysis.md`**: JPEG+signed URL vs MP4 등 스토리지 옵션별 운영 비용 분석
+- **`docs/feature-age-relation-asis-tobe.md`**: #1 사용자 나이/관계 필드 ASIS·TOBE·구현 방향 문서
+
+#### Changed
+- **`app/domain/camera/service.py`**: 낙상 감지(`score≥76` or `fall=True`) 시 `jpeg_bytes`를 `_save_fall_log()`에 전달, 썸네일 업로드 후 GCS 경로를 Kotlin internal API로 전송
+- **`FallLog.kt`**: `imageUrl: String?` 필드 추가 (GCS 경로 저장)
+- **`FallLogResponse.kt`**: `imageUrl` 직접 노출 대신 `hasThumbnail: Boolean` 노출 (GCS 경로 클라이언트 비노출)
+- **`SaveFallLogRequest.kt`**: `imageUrl: String?` 필드 추가
+- **`InternalService.kt`**: FallLog 생성 시 `imageUrl` 매핑 추가
+- **`FallLogRepository.kt`**: `toFallLog()` / `toMap()` 에서 `image_url` 필드 추가
+- **`app/core/config.py`**: `firebase_storage_bucket` 설정 추가
+- **`app/core/firebase.py`**: `storageBucket` 옵션 조건부 주입
+- **`application.yml` / `application-docker.yml`**: `firebase.storage.bucket` 설정 추가
+- **`.env`**: `FIREBASE_STORAGE_BUCKET=on-safe-f1667.appspot.com` 추가
+- **`docker-compose.yml`**: mediamtx(RTSP 테스트 서버) 제거, `FIREBASE_STORAGE_BUCKET` env 주입
+
+---
+
+### 2026-05-17 — 기기 목록 API + 사고 이력 레벨 필터 (#3, #4)
+
+**변경 파일:** `DeviceController.kt` (신규), `DeviceResponse.kt` (신규), `DeviceRepository.kt`, `app/domain/devices/router.py`, `app/domain/devices/schemas.py`, `app/domain/devices/service.py`, `FallLogRepository.kt`, `FallLogService.kt`, `FallLogController.kt`
+
+#### Added
+- **`GET /api/devices/{userId}`** (Kotlin): 사용자의 등록 기기 목록 조회 (`DeviceController`, `DeviceResponse`)
+- **`GET /api/fall-logs/{userId}?level=위험|주의`** 레벨 필터: `FallLogRepository`에 `level` 파라미터 지원 추가
+- **낙상 이력 탭별 카운트**: 전체·위험·주의 건수를 한 번의 조회에서 반환
+
+---
+
+### 2026-05-17 — FCM 알림 log_id/user_id 포함 + 위험 수준 알림 (#2)
+
+**변경 파일:** `InternalService.kt`, `NotificationService.kt`, `FcmTokenUpdateRequest.kt` (신규)
+
+#### Added
+- **FCM 알림 payload**: `log_id`, `user_id` 포함으로 앱에서 알림 탭 시 해당 사고 이력으로 바로 이동 가능
+- **`score≥76` 위험 알림**: 낙상 미발생이더라도 위험 점수 초과 시 보호자 알림 발송
+- **`FcmTokenUpdateRequest`**: FCM 토큰 갱신 전용 DTO 분리
+
+---
+
+### 2026-05-17 — UserController 경로·FCM 토큰 엔드포인트 수정 (`352fa90`)
+
+**변경 파일:** `UserController.kt`, `AuthController.kt`, `AuthService.kt`
+
+#### Fixed
+- `UserController` 경로 매핑 오류 수정
+- FCM 토큰 등록/갱신 엔드포인트 추가 및 분리
+
+---
+
+### 2026-05-17 — Python-Kotlin 연동 버그 수정 및 문서 업데이트 (`9c3e8f6`)
+
+**변경 파일:** `app/ai/engine.py`, `app/core/security.py`, `docs/parent-main-api-spec.md`
+
+#### Fixed
+- Python AI 서버 ↔ Kotlin internal API 연동 버그 수정
+- JWT 보안 설정 보완
+
+#### Docs
+- **`docs/parent-main-api-spec.md`**: 메인 화면 백엔드 API 기능 명세서 추가
+
+---
+
 ## [Unreleased] - feature/camera-streaming
 
 ---

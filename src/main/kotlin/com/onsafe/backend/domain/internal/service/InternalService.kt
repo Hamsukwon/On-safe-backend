@@ -36,16 +36,27 @@ class InternalService(
                 userId = req.userId,
                 score = req.score,
                 fall = req.fall,
-                isConfirmed = req.isConfirmed
+                isConfirmed = req.isConfirmed,
+                imageUrl = req.imageUrl
             )
         )
-        if (req.fall) {
+        val notifData = mapOf("log_id" to req.logId, "user_id" to req.userId, "score" to req.score.toString())
+        if (req.fall || req.score >= 76f) {
             notificationService.sendNotification(
                 NotificationRequest(
                     userId = req.userId,
-                    title = "낙상 감지 경보",
-                    body = "낙상이 감지되었습니다. 즉시 확인하세요.",
-                    data = mapOf("score" to req.score.toString())
+                    title = if (req.fall) "낙상 감지 경보" else "위험 수준 감지",
+                    body = if (req.fall) "낙상이 감지되었습니다. 즉시 확인하세요." else "위험 수준의 움직임이 감지되었습니다. 확인하세요.",
+                    data = notifData
+                )
+            )
+        } else if (req.score >= 51f) {
+            notificationService.sendNotification(
+                NotificationRequest(
+                    userId = req.userId,
+                    title = "주의 수준 감지",
+                    body = "주의가 필요한 움직임이 감지되었습니다. 확인하세요.",
+                    data = notifData
                 )
             )
         }

@@ -25,6 +25,7 @@ enum class ErrorCode(
 
     // ── 사고 이력 ─────────────────────────────────────────
     LOG_NOT_FOUND(HttpStatus.NOT_FOUND, "사고 이력을 찾을 수 없습니다."),
+    THUMBNAIL_NOT_FOUND(HttpStatus.NOT_FOUND, "썸네일이 존재하지 않습니다."),
 
     // ── 카메라 ────────────────────────────────────────────
     CAMERA_NOT_FOUND(HttpStatus.NOT_FOUND, "카메라 정보를 찾을 수 없습니다."),

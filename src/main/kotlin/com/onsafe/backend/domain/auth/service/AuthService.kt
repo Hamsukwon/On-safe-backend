@@ -150,10 +150,10 @@ class AuthService(
         redis.delete(verifiedKey).awaitSingle()
     }
 
-    suspend fun updateFcmToken(request: FcmTokenRequest) {
-        val user = userRepository.findByUserId(request.userId)
+    suspend fun updateFcmToken(userId: String, fcmToken: String) {
+        val user = userRepository.findByUserId(userId)
             ?: throw BusinessException(ErrorCode.USER_NOT_FOUND)
-        userRepository.save(user.copy(fcmToken = request.fcmToken))
+        userRepository.save(user.copy(fcmToken = fcmToken))
     }
 
     private fun issueTokens(userId: String, mail: String) = TokenResponse(

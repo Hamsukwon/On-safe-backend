@@ -15,12 +15,30 @@ class FallLogRepository(private val firestore: Firestore) {
 
     private val col get() = firestore.collection("fall_logs")
 
-    suspend fun findRecentByUserId(userId: String): List<FallLog> {
-        val snap = col.whereEqualTo("user_id", userId)
+    suspend fun findRecentByUserId(userId: String, level: String? = null): List<FallLog> {
+        val all = col.whereEqualTo("user_id", userId)
             .orderBy("timestamp", Query.Direction.DESCENDING)
             .limit(100)
-            .get().await()
-        return snap.documents.map { it.toFallLog() }
+            .get().await().documents.map { it.toFallLog() }
+        return if (level != null) all.filter { it.matchesLevel(level) } else all
+    }
+
+    suspend fun countByUserId(userId: String): Map<String, Int> {
+        val all = col.whereEqualTo("user_id", userId)
+            .orderBy("timestamp", Query.Direction.DESCENDING)
+            .limit(100)
+            .get().await().documents.map { it.toFallLog() }
+        return mapOf(
+            "전체" to all.size,
+            "위험" to all.count { it.matchesLevel("위험") },
+            "주의" to all.count { it.matchesLevel("주의") }
+        )
+    }
+
+    private fun FallLog.matchesLevel(level: String) = when (level) {
+        "위험" -> score >= 76f
+        "주의" -> score in 51f..75.99f
+        else   -> true
     }
 
     suspend fun findByLogIdAndUserId(logId: String, userId: String): FallLog? =
@@ -55,6 +73,7 @@ class FallLogRepository(private val firestore: Firestore) {
         score = getDouble("score")?.toFloat() ?: 0f,
         fall = getBoolean("fall") ?: false,
         isConfirmed = getBoolean("is_confirmed") ?: false,
+        imageUrl = getString("image_url"),
         timestamp = getTimestamp("timestamp")?.toLocalDateTime() ?: LocalDateTime.now()
     )
 
@@ -64,6 +83,7 @@ class FallLogRepository(private val firestore: Firestore) {
         "score" to score,
         "fall" to fall,
         "is_confirmed" to isConfirmed,
+        "image_url" to imageUrl,
         "timestamp" to timestamp.toTimestamp()
     )
 }

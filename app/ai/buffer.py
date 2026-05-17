@@ -64,3 +64,12 @@ async def save_latest_frame(device_id: str, jpeg_bytes: bytes) -> None:
 async def get_latest_frame(device_id: str) -> bytes | None:
     r = get_redis_bytes()
     return await r.get(f"frame:{device_id}")
+
+
+async def check_caution_cooldown(user_id: str, ttl_seconds: int = 300) -> bool:
+    """주의(51~75) 이벤트 쿨다운 확인. True = 쿨다운 없음(이벤트 저장 가능), False = 쿨다운 중.
+    Redis NX 플래그로 원자적으로 설정 — 중복 알림/로그 방지 (기본 5분)."""
+    r = get_redis()
+    key = f"caution_cd:{user_id}"
+    result = await r.set(key, "1", ex=ttl_seconds, nx=True)
+    return result is not None

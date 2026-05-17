@@ -1,6 +1,6 @@
 services:
 
-  # ── Python AI 서버 (FastAPI + MediaPipe + Firestore) ──────────────────────
+  # ── Python AI 서버 (FastAPI + MediaPipe + Firebase Storage) ───────────────
   python-ai:
     build:
       context: .
@@ -11,6 +11,7 @@ services:
     environment:
       REDIS_URL: redis://redis:6379
       FIREBASE_CREDENTIALS: /app/secrets/serviceAccountKey.json
+      FIREBASE_STORAGE_BUCKET: ${FIREBASE_STORAGE_BUCKET:?FIREBASE_STORAGE_BUCKET must be set}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
       KOTLIN_INTERNAL_BASE: http://kotlin-api:8080
     volumes:
@@ -22,7 +23,7 @@ services:
       - onsafe-network
     restart: unless-stopped
 
-  # ── Kotlin Spring Boot API (Firestore 기반) ───────────────────────────────
+  # ── Kotlin Spring Boot API ────────────────────────────────────────────────
   kotlin-api:
     build:
       context: .
@@ -32,6 +33,7 @@ services:
       - "8080:8080"
     environment:
       FIREBASE_CREDENTIALS: /app/secrets/serviceAccountKey.json
+      FIREBASE_STORAGE_BUCKET: ${FIREBASE_STORAGE_BUCKET:?FIREBASE_STORAGE_BUCKET must be set}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
       SPRING_PROFILES_ACTIVE: docker
       MAIL_USERNAME: ${MAIL_USERNAME:-}
@@ -45,7 +47,7 @@ services:
       - onsafe-network
     restart: unless-stopped
 
-  # ── Redis (python-ai 프레임 버퍼 · 점수 캐시) ─────────────────────────────
+  # ── Redis (프레임 버퍼 · 점수 캐시 · 인증코드 임시 저장) ──────────────────
   redis:
     image: redis:7-alpine
     container_name: onsafe-redis
@@ -56,21 +58,6 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-    networks:
-      - onsafe-network
-    restart: unless-stopped
-
-  # ── mediamtx (에뮬레이터 테스트용 RTSP 서버) ────────────────────────────────
-  # 로컬 영상 파일을 RTSP로 스트리밍해 Python AI 서버의 카메라 소스로 사용
-  # 프로덕션에서는 제거하거나 profiles: [test] 로 격리
-  rtsp-server:
-    image: bluenviron/mediamtx:latest
-    container_name: onsafe-rtsp-server
-    ports:
-      - "8554:8554"   # RTSP
-      - "8888:8888"   # HLS (선택)
-    environment:
-      MTX_LOGLEVEL: warn
     networks:
       - onsafe-network
     restart: unless-stopped

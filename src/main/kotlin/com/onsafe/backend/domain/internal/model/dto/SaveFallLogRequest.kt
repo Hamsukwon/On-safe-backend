@@ -6,5 +6,6 @@ data class SaveFallLogRequest(
     val userId: String,
     val score: Float,
     val fall: Boolean,
-    val isConfirmed: Boolean = false
+    val isConfirmed: Boolean = false,
+    val imageUrl: String? = null
 )

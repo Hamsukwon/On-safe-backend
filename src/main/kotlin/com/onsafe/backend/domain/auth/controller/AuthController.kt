@@ -53,13 +53,6 @@ class AuthController(private val authService: AuthService) {
         return ApiResponse.ok(message = "비밀번호가 변경되었습니다")
     }
 
-    @Operation(summary = "FCM 토큰 등록/갱신")
-    @PostMapping("/fcm-token")
-    suspend fun updateFcmToken(@Valid @RequestBody request: FcmTokenRequest): ApiResponse<Unit> {
-        authService.updateFcmToken(request)
-        return ApiResponse.ok(message = "FCM 토큰 등록 완료")
-    }
-
     @Operation(summary = "아이디 중복확인")
     @PostMapping("/check-id")
     suspend fun checkId(@Valid @RequestBody request: CheckIdRequest): ApiResponse<Unit> {

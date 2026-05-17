@@ -30,7 +30,8 @@ class JwtAuthenticationFilter(
             .defaultIfEmpty("")
             .flatMap { blacklisted ->
                 if (blacklisted.isNotEmpty()) {
-                    chain.filter(exchange)
+                    exchange.response.statusCode = HttpStatus.UNAUTHORIZED
+                    exchange.response.setComplete()
                 } else {
                     // WebSocket 경로(/ws/camera/{userId}): 토큰 userId와 경로 userId 불일치 시 403 차단
                     val path = exchange.request.path.value()

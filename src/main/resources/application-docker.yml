@@ -1,5 +1,7 @@
 firebase:
   credentials: /app/secrets/serviceAccountKey.json
+  storage:
+    bucket: ${FIREBASE_STORAGE_BUCKET:}
 
 spring:
   data:

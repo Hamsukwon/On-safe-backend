@@ -1,6 +1,6 @@
 """
 카메라 서비스
-- stream: JPEG 프레임 수신 → AI 추론 → Kotlin internal API로 realtime/fall-log 위임
+- stream: JPEG 프레임 수신 → Kotlin frame 전달 → AI 추론 → Kotlin internal API로 realtime/fall-log 위임
 - score: Redis에서 현재 위험 점수 조회
 - status / url: Firestore devices 컬렉션 조회
 """
@@ -9,11 +9,12 @@ from datetime import datetime, timezone
 
 import httpx
 from google.cloud.firestore_v1.base_query import FieldFilter
-from app.ai.buffer import push_frame_count, should_infer, save_score, get_score, save_latest_frame
+from app.ai.buffer import push_frame_count, should_infer, save_score, get_score, save_latest_frame, check_caution_cooldown
 from app.ai.engine import infer_frame_async
 from app.core.config import settings
 from app.core.exceptions import not_found
 from app.core.firebase import get_firestore
+from app.core.storage import upload_thumbnail
 from app.domain.camera.schemas import (
     StreamResponse, ScoreResponse, StatusResponse,
     CameraUrlResponse,
@@ -37,6 +38,7 @@ def _score_level(score: float) -> str:
 async def process_stream(jpeg_bytes: bytes, user_id: str, device_id: str) -> StreamResponse:
     await push_frame_count(device_id)
     await save_latest_frame(device_id, jpeg_bytes)
+    await _publish_frame(user_id, jpeg_bytes)
     ready = await should_infer(device_id)
 
     if not ready:
@@ -54,7 +56,10 @@ async def process_stream(jpeg_bytes: bytes, user_id: str, device_id: str) -> Str
 
     log_id: str | None = None
     if score >= 76 or fall:
-        log_id = await _save_fall_log(user_id, device_id, score, fall)
+        log_id = await _save_fall_log(user_id, device_id, score, fall, jpeg_bytes)
+    elif score >= 51:
+        if await check_caution_cooldown(user_id):
+            log_id = await _save_fall_log(user_id, device_id, score, fall, jpeg_bytes)
 
     return StreamResponse(score=score, fall=fall, log_id=log_id)
 
@@ -101,6 +106,19 @@ async def _save_realtime_data(user_id: str, features: dict, score: float) -> Non
         print(f"[camera.service] realtime_data 정리 오류 (Firestore 복합 인덱스 미생성): {e}")
 
 
+async def _publish_frame(user_id: str, jpeg_bytes: bytes) -> None:
+    try:
+        async with httpx.AsyncClient() as client:
+            await client.post(
+                f"{settings.kotlin_internal_base}/internal/frame/{user_id}",
+                content=jpeg_bytes,
+                headers={"Content-Type": "application/octet-stream"},
+                timeout=3.0,
+            )
+    except Exception as e:
+        print(f"[camera.service] /internal/frame 호출 오류: {e}")
+
+
 async def _update_realtime(user_id: str, score: float, level: str) -> None:
     try:
         async with httpx.AsyncClient() as client:
@@ -113,8 +131,15 @@ async def _update_realtime(user_id: str, score: float, level: str) -> None:
         print(f"[camera.service] /internal/realtime 호출 오류: {e}")
 
 
-async def _save_fall_log(user_id: str, device_id: str, score: float, fall: bool) -> str:
+async def _save_fall_log(user_id: str, device_id: str, score: float, fall: bool, jpeg_bytes: bytes) -> str:
     log_id = str(uuid.uuid4())
+
+    image_url: str | None = None
+    try:
+        image_url = await upload_thumbnail(log_id, jpeg_bytes)
+    except Exception as e:
+        print(f"[camera.service] 썸네일 업로드 오류 (fall-log는 계속 저장): {e}")
+
     try:
         async with httpx.AsyncClient() as client:
             await client.post(
@@ -126,6 +151,7 @@ async def _save_fall_log(user_id: str, device_id: str, score: float, fall: bool)
                     "score": score,
                     "fall": fall,
                     "is_confirmed": False,
+                    "image_url": image_url,  # GCS 경로 or 에뮬레이터 URL
                 },
                 timeout=3.0,
             )

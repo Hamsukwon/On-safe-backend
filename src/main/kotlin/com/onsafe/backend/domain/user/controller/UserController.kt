@@ -1,7 +1,7 @@
-package com.onsafe.backend.domain.user.controller
+    package com.onsafe.backend.domain.user.controller
 
 import com.onsafe.backend.common.response.ApiResponse
-import com.onsafe.backend.domain.auth.model.dto.FcmTokenRequest
+import com.onsafe.backend.domain.auth.model.dto.FcmTokenUpdateRequest
 import com.onsafe.backend.domain.auth.service.AuthService
 import com.onsafe.backend.domain.user.model.dto.UserResponse
 import com.onsafe.backend.domain.user.model.dto.UserUpdateRequest
@@ -39,9 +39,9 @@ class UserController(
     @PutMapping("/{userId}/fcm-token")
     suspend fun updateFcmToken(
         @PathVariable userId: String,
-        @RequestBody request: FcmTokenRequest
+        @Valid @RequestBody request: FcmTokenUpdateRequest
     ): ApiResponse<Unit> {
-        authService.updateFcmToken(request.copy(userId = userId))
+        authService.updateFcmToken(userId, request.fcmToken)
         return ApiResponse.ok(message = "FCM 토큰 등록 완료")
     }
 
