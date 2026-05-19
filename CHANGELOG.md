@@ -4,6 +4,17 @@
 
 ---
 
+### 2026-05-19 — API 전체 테스트 후 버그 수정 2건
+
+**변경 파일:** `NotificationService.kt`, `app/domain/devices/router.py`, `app/domain/devices/service.py`
+
+#### Fixed
+- **`NotificationService.kt`**: `sendAsync()` 호출을 `try/catch`로 감쌈 — FCM 토큰이 무효하거나 만료된 경우 Firebase 예외가 전파되어 `POST /internal/fall-log`가 500을 반환하던 문제 수정. FCM 전송 실패 시 낙상 로그 Firestore 저장은 유지되고, 응답 `status:"error"`, `message:"FCM 전송 실패: ..."` 반환 후 200으로 정상 처리
+- **`app/domain/devices/router.py`**: `GET /api/devices/{user_id}` 엔드포인트 추가 — 라우터에 POST만 등록되어 있어 GET 요청 시 405 반환하던 문제 수정
+- **`app/domain/devices/service.py`**: `get_devices(user_id)` 함수 추가 — Firestore `devices` 컬렉션에서 `user_id` 기준으로 기기 목록을 스트리밍 조회하여 반환
+
+---
+
 ### 2026-05-17 — Firebase Storage 썸네일 파이프라인 (#5~#7)
 
 **변경 파일:** `app/core/storage.py` (신규), `app/core/config.py`, `app/core/firebase.py`, `app/domain/camera/service.py`, `StorageService.kt` (신규), `FallLog.kt`, `FallLogResponse.kt`, `SaveFallLogRequest.kt`, `InternalService.kt`, `FallLogRepository.kt`, `FallLogController.kt`, `FallLogService.kt`, `ErrorCode.kt`, `application.yml`, `application-docker.yml`, `.env`, `.env.example`, `docker-compose.yml`

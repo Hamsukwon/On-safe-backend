@@ -30,8 +30,11 @@ class NotificationService(private val userRepository: UserRepository) {
                     .build()
             )
         request.data?.forEach { (k, v) -> messageBuilder.putData(k, v) }
-        val messageId = FirebaseMessaging.getInstance().sendAsync(messageBuilder.build()).await()
-
-        return NotificationResponse(status = "ok", message = "알림 전송 완료", fcmMessageId = messageId)
+        return try {
+            val messageId = FirebaseMessaging.getInstance().sendAsync(messageBuilder.build()).await()
+            NotificationResponse(status = "ok", message = "알림 전송 완료", fcmMessageId = messageId)
+        } catch (e: Exception) {
+            NotificationResponse(status = "error", message = "FCM 전송 실패: ${e.message}", fcmMessageId = "")
+        }
     }
 }

@@ -1,3 +1,4 @@
+
 # On-safe-backend 프로젝트 구조
 
 > 최종 수정일: 2026-05-17 (feature/parent-main)
@@ -43,9 +44,9 @@ app/
     │                                - score 51~75 → 5분 쿨다운 통과 시 _save_fall_log
     │                                - Kotlin internal API 호출 (realtime · fall-log 위임)
     └── devices/
-        ├── router.py             ✅ /api/devices/* 2개 엔드포인트 등록
+        ├── router.py             ✅ /api/devices/* 2개 엔드포인트 등록 (GET 목록 + POST 등록)
         ├── schemas.py            ✅ DeviceResponse, DeviceRegisterRequest
-        └── service.py            ✅ 기기 목록 조회, 기기 등록 (Firestore)
+        └── service.py            ✅ 기기 목록 조회(get_devices), 기기 등록 (Firestore)
 
 pkl/
 ├── decision_tree_model.pkl       ✅ 낙상 감지 학습된 Decision Tree 모델
@@ -166,7 +167,7 @@ src/main/kotlin/com/onsafe/backend/
     │   │   ├── NotificationRequest.kt   ✅ FCM 알림 전송 요청
     │   │   └── NotificationResponse.kt  ✅ FCM 전송 결과 응답 (messageId 포함)
     │   └── service/
-    │       └── NotificationService.kt   ✅ Firebase FCM 메시지 발송
+    │       └── NotificationService.kt   ✅ Firebase FCM 메시지 발송 (FCM 오류 try/catch 처리 — 토큰 무효 시 낙상 로그 저장은 유지)
     ├── settings/
     │   ├── controller/
     │   │   └── SettingsController.kt    ✅ /api/settings/* 알림설정·보관기간 GET/PUT
@@ -409,3 +410,5 @@ docs/
 | 2026-05-13 | 내부 API JSON 필드명 camelCase → snake_case | ✅ 수정 완료 |
 | 2026-05-13 | `realtime_data` Firestore 복합 인덱스 누락 | ✅ 해소 — 현재 구조는 `userId` 단일 문서 덮어쓰기(복합 인덱스 불필요) |
 | 2026-05-17 | 주의(51~75) 이벤트 미저장·알림 없음 | ✅ Python 쿨다운 + Kotlin 분기 구현 완료 |
+| 2026-05-19 | `POST /internal/fall-log` FCM 토큰 무효 시 500 (`NotificationService` Firebase 예외 미처리) | ✅ try/catch 추가 — FCM 실패 시 낙상 로그 저장 유지, 200 반환 |
+| 2026-05-19 | Python `GET /api/devices/{userId}` 405 (라우터에 GET 미등록) | ✅ `router.py` GET 엔드포인트 + `service.py` `get_devices()` 추가 |

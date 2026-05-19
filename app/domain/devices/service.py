@@ -6,6 +6,21 @@ from app.domain.devices.schemas import DeviceRegisterRequest
 _DEVICES = "devices"
 
 
+async def get_devices(user_id: str) -> dict:
+    db = get_firestore()
+    docs = db.collection(_DEVICES).where("user_id", "==", user_id).stream()
+    devices = []
+    async for doc in docs:
+        d = doc.to_dict()
+        devices.append({
+            "device_id": d.get("device_id"),
+            "device_name": d.get("device_name"),
+            "status": d.get("status"),
+            "last_seen": d.get("last_seen").isoformat() if d.get("last_seen") else None,
+        })
+    return {"devices": devices}
+
+
 async def register_device(user_id: str, req: DeviceRegisterRequest) -> dict:
     db = get_firestore()
     doc_ref = db.collection(_DEVICES).document(req.device_id)
