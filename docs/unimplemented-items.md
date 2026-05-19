@@ -185,3 +185,5 @@ MP4 추가:  JPEG 수신 → AI 추론 → (낙상 감지 시) JPEG 업로드 + 
 |------|------|
 | `docs/storage-operational-analysis.md` | 스토리지 옵션별 운영 비용 분석 |
 | `docs/parent-main-api-spec.md` | 메인 화면 API 전체 명세 |
+| `ASIS-TOBE_user-age-relation-fields.md` | #1 사용자 나이/관계 필드 상세 구현 스펙 |
+| `ASIS-TOBE_falllog-video-mp4.md` | #2 낙상 영상 클립 MP4 상세 구현 스펙 |

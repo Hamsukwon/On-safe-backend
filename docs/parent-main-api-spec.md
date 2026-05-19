@@ -106,9 +106,11 @@
       {
         "log_id": "uuid-1234",
         "device_id": "device_001",
+        "user_id": "user001",
         "score": 87.5,
         "fall": true,
         "is_confirmed": false,
+        "has_thumbnail": true,
         "timestamp": "2026-05-17T14:23:00"
       }
     ]

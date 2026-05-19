@@ -183,7 +183,8 @@ src/main/kotlin/com/onsafe/backend/
     │       └── SettingsService.kt       ✅ 알림설정·보관기간 조회·변경 로직
     └── user/
         ├── controller/
-        │   └── UserController.kt        ✅ GET/PUT/DELETE /api/user/{userId}
+        │   └── UserController.kt        ✅ GET/PUT/DELETE /api/users/{userId}
+        │                                   PUT /api/users/{userId}/fcm-token
         ├── model/
         │   ├── dto/
         │   │   ├── UserResponse.kt      ✅ 유저 정보 응답
@@ -255,7 +256,9 @@ docs/
 - `GET /thumbnail` 또는 `GET /download` 호출 시 Kotlin StorageService가 V4 Signed URL 온디맨드 발급 (1시간 유효)
 
 ### 3. Python ↔ Kotlin 내부 API 연동
-- `camera/service.py`가 추론 후 `POST /internal/realtime` 호출 → Kotlin이 `realtime_data/{userId}` 저장
+- `camera/service.py`가 매 추론 후 `POST /internal/realtime` 호출 → Kotlin이 `realtime_data/{userId}` **단일 문서 덮어쓰기**
+  - 저장 필드: `score(Float)`, `level(String)`, `updated_at(Timestamp)` — 문서 ID = `userId`, 사용자당 1개
+  - Python의 Firestore 직접 쓰기 없음 (모든 Firestore 접근은 Kotlin을 통해서만)
 - 낙상·위험·주의 감지 시 `POST /internal/fall-log` 호출 → Kotlin이 `fall_logs` 저장 + FCM 발송
 - 직접 Firestore 저장 및 FCM 발송 코드 Python 측 없음
 
@@ -303,7 +306,6 @@ docs/
 | ✅ | `POST /api/auth/logout` | |
 | ✅ | `POST /api/auth/check-id` | 중복/사용가능 양쪽 확인 |
 | ✅ | `POST /api/auth/find-id` | userId 마스킹 처리 확인 |
-| ✅ | `POST /api/auth/fcm-token` | FcmTokenUpdateRequest 사용 |
 | ✅ | `POST /api/auth/refresh` | 새 토큰 쌍 발급 정상 |
 | ✅ | `POST /api/auth/send-reset-code` | 이메일 발송 성공 (SMTP 환경변수 필요) |
 | ✅ | `POST /api/auth/send-email-code` | |
@@ -315,9 +317,10 @@ docs/
 
 | 결과 | 엔드포인트 | 비고 |
 |------|-----------|------|
-| ✅ | `GET /api/user/{userId}` | |
-| ✅ | `PUT /api/user/{userId}` | |
-| ✅ | `DELETE /api/user/{userId}` | |
+| ✅ | `GET /api/users/{userId}` | |
+| ✅ | `PUT /api/users/{userId}` | |
+| ✅ | `DELETE /api/users/{userId}` | |
+| ✅ | `PUT /api/users/{userId}/fcm-token` | FcmTokenUpdateRequest 사용 |
 
 #### Camera — Kotlin
 
@@ -342,6 +345,7 @@ docs/
 | 결과 | 엔드포인트 | 비고 |
 |------|-----------|------|
 | ✅ | `GET /api/fall-logs/{userId}` | 전체 목록 |
+| ✅ | `GET /api/fall-logs/{userId}/counts` | 탭별 건수 조회 |
 | ✅ | `GET /api/fall-logs/{userId}?level=위험` | 레벨 필터 |
 | ✅ | `GET /api/fall-logs/{userId}?level=주의` | 레벨 필터 |
 | ✅ | `GET /api/fall-logs/{userId}/{logId}` | 단건 조회 |
@@ -403,5 +407,5 @@ docs/
 | 2026-05-13 | confirm 경로 오류 | ✅ 수정 완료 |
 | 2026-05-13 | `GET /api/devices/{userId}` 빈 목록 (`.get()` → `.stream()`, upsert 로직) | ✅ 수정 완료 |
 | 2026-05-13 | 내부 API JSON 필드명 camelCase → snake_case | ✅ 수정 완료 |
-| 2026-05-13 | `realtime_data` Firestore 복합 인덱스 누락 | ✅ Firebase 콘솔에서 생성 완료 |
+| 2026-05-13 | `realtime_data` Firestore 복합 인덱스 누락 | ✅ 해소 — 현재 구조는 `userId` 단일 문서 덮어쓰기(복합 인덱스 불필요) |
 | 2026-05-17 | 주의(51~75) 이벤트 미저장·알림 없음 | ✅ Python 쿨다운 + Kotlin 분기 구현 완료 |

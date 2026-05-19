@@ -22,7 +22,7 @@
 Python AI 서버 (FastAPI + FFmpeg)
         │ ① JPEG 프레임 추출
         │ POST /internal/frame/{userId}   ──→  Redis PUBLISH camera:frames:{userId}
-        │ ② 낙상 감지 시 POST /internal/realtime
+        │ ② 매 추론 후 POST /internal/realtime (score, level → realtime_data/{userId} 덮어쓰기)
         ▼
 Kotlin Spring Backend (WebFlux)
         │ Redis SUBSCRIBE camera:frames:{userId}

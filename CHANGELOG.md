@@ -19,7 +19,8 @@
 - **`gcs-lifecycle.json`**: fall-thumbnails/ 30일 자동 삭제 Lifecycle 정책
 - **`storage.rules`**: Firebase Storage 보안 규칙 (서비스 계정 접근 전용)
 - **`docs/storage-operational-analysis.md`**: JPEG+signed URL vs MP4 등 스토리지 옵션별 운영 비용 분석
-- **`docs/feature-age-relation-asis-tobe.md`**: #1 사용자 나이/관계 필드 ASIS·TOBE·구현 방향 문서
+- **`ASIS-TOBE_user-age-relation-fields.md`**: #1 사용자 나이/관계 필드 ASIS·TOBE·구현 방향 문서 (프로젝트 루트)
+- **`ASIS-TOBE_falllog-video-mp4.md`**: #2 낙상 영상 클립 MP4 저장·다운로드 ASIS·TOBE·구현 방향 문서 (프로젝트 루트)
 
 #### Changed
 - **`app/domain/camera/service.py`**: 낙상 감지(`score≥76` or `fall=True`) 시 `jpeg_bytes`를 `_save_fall_log()`에 전달, 썸네일 업로드 후 GCS 경로를 Kotlin internal API로 전송
@@ -43,7 +44,7 @@
 #### Added
 - **`GET /api/devices/{userId}`** (Kotlin): 사용자의 등록 기기 목록 조회 (`DeviceController`, `DeviceResponse`)
 - **`GET /api/fall-logs/{userId}?level=위험|주의`** 레벨 필터: `FallLogRepository`에 `level` 파라미터 지원 추가
-- **낙상 이력 탭별 카운트**: 전체·위험·주의 건수를 한 번의 조회에서 반환
+- **`GET /api/fall-logs/{userId}/counts`** (Kotlin): 전체·위험·주의 탭별 건수를 한 번의 조회에서 반환
 
 ---
 
@@ -63,8 +64,8 @@
 **변경 파일:** `UserController.kt`, `AuthController.kt`, `AuthService.kt`
 
 #### Fixed
-- `UserController` 경로 매핑 오류 수정
-- FCM 토큰 등록/갱신 엔드포인트 추가 및 분리
+- `UserController` 경로 매핑 오류 수정: `/api/user/` → `/api/users/`
+- FCM 토큰 엔드포인트 분리: `POST /api/auth/fcm-token` 제거 → `PUT /api/users/{userId}/fcm-token` 로 이전 (소유권 검증 포함)
 
 ---
 
