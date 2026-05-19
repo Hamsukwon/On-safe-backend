@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
+import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.web.bind.annotation.*
 import java.net.URI
 
@@ -26,37 +27,53 @@ class FallLogController(private val fallLogService: FallLogService) {
     @GetMapping("/{userId}")
     suspend fun getLogs(
         @PathVariable userId: String,
+        @AuthenticationPrincipal principal: String,
         @RequestParam(required = false) level: String?
-    ): ApiResponse<Map<String, List<FallLogResponse>>> =
-        ApiResponse.ok(mapOf("logs" to fallLogService.getLogs(userId, level)))
+    ): ApiResponse<Map<String, List<FallLogResponse>>> {
+        if (principal != userId) throw BusinessException(ErrorCode.FORBIDDEN)
+        return ApiResponse.ok(mapOf("logs" to fallLogService.getLogs(userId, level)))
+    }
 
     @Operation(summary = "낙상 로그 탭별 건수 조회", security = [SecurityRequirement(name = "BearerAuth")])
     @GetMapping("/{userId}/counts")
-    suspend fun getLogCounts(@PathVariable userId: String): ApiResponse<Map<String, Int>> =
-        ApiResponse.ok(fallLogService.getLogCounts(userId))
+    suspend fun getLogCounts(
+        @PathVariable userId: String,
+        @AuthenticationPrincipal principal: String
+    ): ApiResponse<Map<String, Int>> {
+        if (principal != userId) throw BusinessException(ErrorCode.FORBIDDEN)
+        return ApiResponse.ok(fallLogService.getLogCounts(userId))
+    }
 
     @Operation(summary = "낙상 로그 상세 조회", security = [SecurityRequirement(name = "BearerAuth")])
     @GetMapping("/{userId}/{logId}")
     suspend fun getLog(
         @PathVariable userId: String,
-        @PathVariable logId: String
-    ): ApiResponse<FallLogResponse> =
-        ApiResponse.ok(fallLogService.getLog(userId, logId))
+        @PathVariable logId: String,
+        @AuthenticationPrincipal principal: String
+    ): ApiResponse<FallLogResponse> {
+        if (principal != userId) throw BusinessException(ErrorCode.FORBIDDEN)
+        return ApiResponse.ok(fallLogService.getLog(userId, logId))
+    }
 
     @Operation(summary = "낙상 이벤트 확인 처리", security = [SecurityRequirement(name = "BearerAuth")])
     @PatchMapping("/{userId}/{logId}/confirm")
     suspend fun confirmLog(
         @PathVariable userId: String,
-        @PathVariable logId: String
-    ): ApiResponse<FallLogResponse> =
-        ApiResponse.ok(fallLogService.confirmLog(userId, logId), "낙상 이벤트를 확인 처리했습니다.")
+        @PathVariable logId: String,
+        @AuthenticationPrincipal principal: String
+    ): ApiResponse<FallLogResponse> {
+        if (principal != userId) throw BusinessException(ErrorCode.FORBIDDEN)
+        return ApiResponse.ok(fallLogService.confirmLog(userId, logId), "낙상 이벤트를 확인 처리했습니다.")
+    }
 
     @Operation(summary = "낙상 로그 삭제", security = [SecurityRequirement(name = "BearerAuth")])
     @DeleteMapping("/{userId}/{logId}")
     suspend fun deleteLog(
         @PathVariable userId: String,
-        @PathVariable logId: String
+        @PathVariable logId: String,
+        @AuthenticationPrincipal principal: String
     ): ApiResponse<Unit> {
+        if (principal != userId) throw BusinessException(ErrorCode.FORBIDDEN)
         fallLogService.deleteLog(userId, logId)
         return ApiResponse.ok(message = "낙상 로그가 삭제되었습니다.")
     }
@@ -69,8 +86,10 @@ class FallLogController(private val fallLogService: FallLogService) {
     @GetMapping("/{userId}/{logId}/thumbnail")
     suspend fun getThumbnail(
         @PathVariable userId: String,
-        @PathVariable logId: String
+        @PathVariable logId: String,
+        @AuthenticationPrincipal principal: String
     ): ApiResponse<Map<String, String>> {
+        if (principal != userId) throw BusinessException(ErrorCode.FORBIDDEN)
         val signedUrl = fallLogService.getSignedUrl(userId, logId)
         return ApiResponse.ok(mapOf("signed_url" to signedUrl))
     }
@@ -83,8 +102,10 @@ class FallLogController(private val fallLogService: FallLogService) {
     @GetMapping("/{userId}/{logId}/download")
     suspend fun downloadThumbnail(
         @PathVariable userId: String,
-        @PathVariable logId: String
+        @PathVariable logId: String,
+        @AuthenticationPrincipal principal: String
     ): ResponseEntity<Unit> {
+        if (principal != userId) throw BusinessException(ErrorCode.FORBIDDEN)
         val signedUrl = fallLogService.getSignedUrl(userId, logId)
         return ResponseEntity.status(HttpStatus.FOUND)
             .location(URI.create(signedUrl))
