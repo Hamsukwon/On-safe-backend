@@ -31,7 +31,11 @@ class AuthController(private val authService: AuthService) {
 
     @Operation(summary = "로그아웃")
     @PostMapping("/logout")
-    suspend fun logout(): ApiResponse<Unit> {
+    suspend fun logout(
+        @RequestHeader(value = "Authorization", required = false) authorization: String?
+    ): ApiResponse<Unit> {
+        val token = authorization?.removePrefix("Bearer ")
+        if (!token.isNullOrBlank()) authService.logout(token)
         return ApiResponse.ok(message = "로그아웃 완료")
     }
 
@@ -47,13 +51,6 @@ class AuthController(private val authService: AuthService) {
     suspend fun resetPassword(@Valid @RequestBody request: ResetPasswordRequest): ApiResponse<Unit> {
         authService.resetPassword(request)
         return ApiResponse.ok(message = "비밀번호가 변경되었습니다")
-    }
-
-    @Operation(summary = "FCM 토큰 등록/갱신")
-    @PostMapping("/fcm-token")
-    suspend fun updateFcmToken(@Valid @RequestBody request: FcmTokenRequest): ApiResponse<Unit> {
-        authService.updateFcmToken(request)
-        return ApiResponse.ok(message = "FCM 토큰 등록 완료")
     }
 
     @Operation(summary = "아이디 중복확인")

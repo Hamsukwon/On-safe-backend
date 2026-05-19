@@ -21,6 +21,10 @@ class SettingsRepository(private val firestore: Firestore) {
         return settings
     }
 
+    suspend fun deleteByUserId(userId: String) {
+        col.document(userId).delete().await()
+    }
+
     private fun DocumentSnapshot.toSettings() = UserSettings(
         userId = id,
         notificationEnabled = getBoolean("notification_enabled") ?: true,

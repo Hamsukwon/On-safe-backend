@@ -26,7 +26,3 @@ class CameraUrlResponse(BaseModel):
     camera_url: Optional[str]
 
 
-class ConfirmResponse(BaseModel):
-    status: str = "ok"
-    log_id: str
-    is_confirmed: bool

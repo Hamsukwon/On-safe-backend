@@ -216,6 +216,6 @@ def infer_frame(jpeg_bytes: bytes, device_id: str, fps: float = 30.0) -> dict:
         return {"score": 0.0, "fall": False, "features": {}}
 
 
-async def infer_frame_async(jpeg_bytes: bytes, device_id: str, fps: float = 2.0) -> dict:
+async def infer_frame_async(jpeg_bytes: bytes, device_id: str, fps: float = 30.0) -> dict:
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(None, infer_frame, jpeg_bytes, device_id, fps)

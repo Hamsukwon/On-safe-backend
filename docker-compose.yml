@@ -1,6 +1,6 @@
 services:
 
-  # ── Python AI 서버 (FastAPI + MediaPipe + Firestore) ──────────────────────
+  # ── Python AI 서버 (FastAPI + MediaPipe + Firebase Storage) ───────────────
   python-ai:
     build:
       context: .
@@ -11,7 +11,9 @@ services:
     environment:
       REDIS_URL: redis://redis:6379
       FIREBASE_CREDENTIALS: /app/secrets/serviceAccountKey.json
+      FIREBASE_STORAGE_BUCKET: ${FIREBASE_STORAGE_BUCKET:?FIREBASE_STORAGE_BUCKET must be set}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      KOTLIN_INTERNAL_BASE: http://kotlin-api:8080
     volumes:
       - ./serviceAccountKey.json:/app/secrets/serviceAccountKey.json:ro
     depends_on:
@@ -21,7 +23,7 @@ services:
       - onsafe-network
     restart: unless-stopped
 
-  # ── Kotlin Spring Boot API (Firestore 기반) ───────────────────────────────
+  # ── Kotlin Spring Boot API ────────────────────────────────────────────────
   kotlin-api:
     build:
       context: .
@@ -31,17 +33,21 @@ services:
       - "8080:8080"
     environment:
       FIREBASE_CREDENTIALS: /app/secrets/serviceAccountKey.json
+      FIREBASE_STORAGE_BUCKET: ${FIREBASE_STORAGE_BUCKET:?FIREBASE_STORAGE_BUCKET must be set}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
       SPRING_PROFILES_ACTIVE: docker
       MAIL_USERNAME: ${MAIL_USERNAME:-}
       MAIL_PASSWORD: ${MAIL_PASSWORD:-}
     volumes:
       - ./serviceAccountKey.json:/app/secrets/serviceAccountKey.json:ro
+    depends_on:
+      redis:
+        condition: service_healthy
     networks:
       - onsafe-network
     restart: unless-stopped
 
-  # ── Redis (python-ai 프레임 버퍼 · 점수 캐시) ─────────────────────────────
+  # ── Redis (프레임 버퍼 · 점수 캐시 · 인증코드 임시 저장) ──────────────────
   redis:
     image: redis:7-alpine
     container_name: onsafe-redis

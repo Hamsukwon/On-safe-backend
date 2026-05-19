@@ -1,25 +1,27 @@
 package com.onsafe.backend.domain.logs.model.dto
 
-import com.onsafe.backend.domain.logs.model.entity.DetectionLog
+import com.onsafe.backend.domain.logs.model.entity.FallLog
 import java.time.LocalDateTime
 
-data class DetectionLogResponse(
+data class FallLogResponse(
     val logId: String,
     val deviceId: String,
     val userId: String,
     val score: Float,
     val fall: Boolean,
     val isConfirmed: Boolean,
+    val hasThumbnail: Boolean,
     val timestamp: LocalDateTime
 ) {
     companion object {
-        fun from(log: DetectionLog) = DetectionLogResponse(
+        fun from(log: FallLog) = FallLogResponse(
             logId = log.logId,
             deviceId = log.deviceId,
             userId = log.userId,
             score = log.score,
             fall = log.fall,
             isConfirmed = log.isConfirmed,
+            hasThumbnail = log.imageUrl != null,
             timestamp = log.timestamp
         )
     }
