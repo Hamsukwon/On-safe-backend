@@ -11,18 +11,6 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
-  mail:
-    host: ${MAIL_HOST:smtp.gmail.com}
-    port: ${MAIL_PORT:587}
-    username: ${MAIL_USERNAME:}
-    password: ${MAIL_PASSWORD:}
-    properties:
-      mail:
-        smtp:
-          auth: true
-          starttls:
-            enable: true
-
 server:
   port: 8080
 
@@ -41,6 +29,11 @@ springdoc:
     path: /swagger-ui.html
   api-docs:
     path: /api-docs
+
+aws:
+  ses:
+    region: ${AWS_REGION:ap-northeast-2}
+    from: ${SES_FROM_EMAIL:}
 
 logging:
   level:
