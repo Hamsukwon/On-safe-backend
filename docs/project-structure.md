@@ -229,12 +229,13 @@ requirements.txt         ✅ Python 패키지 목록
 ## 📄 문서
 
 ```
+README.md                                   프로젝트 개요
 CHANGELOG.md                                브랜치별 변경 이력 (feature/parent-main 포함)
+v2.0_onsafe_api_spec.md                     v2.0 API 명세서
+v3.0_onsafe_api_spec.md                     v3.0 API 명세서
 docs/
 ├── camera-streaming-implementation.md      실시간 스트리밍 구현 상세
-├── parent-main-api-spec.md                 메인 화면 백엔드 API 기능 명세서
 ├── project-structure.md                    이 파일 — 전체 프로젝트 구조
-├── storage-operational-analysis.md         스토리지 옵션별 운영 비용 분석 (JPEG/MP4/S3)
 └── unimplemented-items.md                  미구현 항목 목록 (#1 age/relation, Option2 MP4)
                                             MP4 AWS S3 비용 시나리오 및 병목 분석 포함
 ```
