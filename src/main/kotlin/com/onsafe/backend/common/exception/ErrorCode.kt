@@ -11,10 +11,7 @@ enum class ErrorCode(
     val message: String
 ) {
     // ── 공통 ──────────────────────────────────────────────
-    INVALID_INPUT(HttpStatus.BAD_REQUEST, "입력값이 올바르지 않습니다."),
-    UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "인증이 필요합니다."),
     FORBIDDEN(HttpStatus.FORBIDDEN, "접근 권한이 없습니다."),
-    NOT_FOUND(HttpStatus.NOT_FOUND, "리소스를 찾을 수 없습니다."),
 
     // ── 인증/회원 ──────────────────────────────────────────
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."),
@@ -23,21 +20,12 @@ enum class ErrorCode(
     INVALID_TOKEN(HttpStatus.UNAUTHORIZED, "유효하지 않은 토큰입니다."),
     EXPIRED_TOKEN(HttpStatus.UNAUTHORIZED, "만료된 토큰입니다."),
 
-    // ── 피보호자(노인) ──────────────────────────────────────
-    ELDER_NOT_FOUND(HttpStatus.NOT_FOUND, "피보호자 정보를 찾을 수 없습니다."),
-
-    // ── 낙상 이벤트 ───────────────────────────────────────
-    FALL_EVENT_NOT_FOUND(HttpStatus.NOT_FOUND, "낙상 이벤트를 찾을 수 없습니다."),
-
     // ── 기기 ──────────────────────────────────────────────
     DEVICE_NOT_FOUND(HttpStatus.NOT_FOUND, "기기를 찾을 수 없습니다."),
-    DEVICE_ALREADY_REGISTERED(HttpStatus.CONFLICT, "이미 등록된 기기입니다."),
 
     // ── 사고 이력 ─────────────────────────────────────────
     LOG_NOT_FOUND(HttpStatus.NOT_FOUND, "사고 이력을 찾을 수 없습니다."),
-
-    // ── 설정 ──────────────────────────────────────────────
-    SETTINGS_NOT_FOUND(HttpStatus.NOT_FOUND, "설정 정보를 찾을 수 없습니다."),
+    THUMBNAIL_NOT_FOUND(HttpStatus.NOT_FOUND, "썸네일이 존재하지 않습니다."),
 
     // ── 카메라 ────────────────────────────────────────────
     CAMERA_NOT_FOUND(HttpStatus.NOT_FOUND, "카메라 정보를 찾을 수 없습니다."),
@@ -48,11 +36,9 @@ enum class ErrorCode(
 
     // ── 비밀번호 재설정 ────────────────────────────────────
     MAIL_NOT_MATCH(HttpStatus.BAD_REQUEST, "이메일이 일치하지 않습니다."),
-    INVALID_RESET_CODE(HttpStatus.BAD_REQUEST, "유효하지 않은 인증코드입니다."),
-    RESET_CODE_EXPIRED(HttpStatus.BAD_REQUEST, "인증코드가 만료되었습니다. 다시 요청해 주세요."),
+    INVALID_RESET_CODE(HttpStatus.BAD_REQUEST, "유효하지 않은 인증코드입니다. 코드가 만료되었거나 올바르지 않습니다."),
 
     // ── 이메일 인증 ────────────────────────────────────────
-    INVALID_EMAIL_CODE(HttpStatus.BAD_REQUEST, "유효하지 않은 인증코드입니다."),
-    EMAIL_CODE_EXPIRED(HttpStatus.BAD_REQUEST, "인증코드가 만료되었습니다. 다시 요청해 주세요."),
+    INVALID_EMAIL_CODE(HttpStatus.BAD_REQUEST, "유효하지 않은 인증코드입니다. 코드가 만료되었거나 올바르지 않습니다."),
     MAIL_SEND_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "이메일 발송에 실패했습니다.")
 }

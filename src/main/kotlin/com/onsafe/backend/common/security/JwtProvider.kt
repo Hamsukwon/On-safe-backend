@@ -5,6 +5,7 @@ import io.jsonwebtoken.Jwts
 import io.jsonwebtoken.security.Keys
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
+import java.time.Duration
 import java.util.Date
 import javax.crypto.SecretKey
 
@@ -33,6 +34,11 @@ class JwtProvider(
     fun validate(token: String): Boolean = runCatching {
         parseClaims(token).expiration.after(Date())
     }.getOrDefault(false)
+
+    fun getRemainingExpiry(token: String): Duration = runCatching {
+        val remaining = parseClaims(token).expiration.time - System.currentTimeMillis()
+        if (remaining > 0) Duration.ofMillis(remaining) else Duration.ZERO
+    }.getOrDefault(Duration.ZERO)
 
     private fun buildToken(userId: String, email: String, expiry: Long): String {
         val now = Date()

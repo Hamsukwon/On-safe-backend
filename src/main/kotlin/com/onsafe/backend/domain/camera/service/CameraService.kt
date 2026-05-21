@@ -3,16 +3,18 @@ package com.onsafe.backend.domain.camera.service
 import com.onsafe.backend.common.exception.BusinessException
 import com.onsafe.backend.common.exception.ErrorCode
 import com.onsafe.backend.domain.camera.model.dto.CameraUrlRequest
+import com.onsafe.backend.domain.camera.model.dto.DeviceResponse
 import com.onsafe.backend.domain.camera.model.dto.RiskScoreResponse
 import com.onsafe.backend.domain.camera.model.dto.RiskStatusResponse
+import com.onsafe.backend.domain.camera.model.entity.RiskLevel
+import com.onsafe.backend.domain.camera.repository.DeviceRepository
 import com.onsafe.backend.domain.camera.repository.RealtimeDataRepository
-import com.onsafe.backend.domain.user.repository.UserRepository
 import org.springframework.stereotype.Service
 
 @Service
 class CameraService(
     private val realtimeDataRepository: RealtimeDataRepository,
-    private val userRepository: UserRepository
+    private val deviceRepository: DeviceRepository
 ) {
 
     suspend fun getRiskScore(userId: String): RiskScoreResponse {
@@ -29,38 +31,30 @@ class CameraService(
     suspend fun getRiskStatus(userId: String): RiskStatusResponse {
         val data = realtimeDataRepository.findByUserId(userId)
             ?: throw BusinessException(ErrorCode.REALTIME_DATA_NOT_FOUND)
-
+        val risk = RiskLevel.fromLabel(data.level)
         return RiskStatusResponse(
             userId = userId,
-            level = data.level,
+            level = risk.label,
             score = data.score,
-            colorCode = colorCodeOf(data.level)
+            colorCode = risk.colorCode
         )
     }
 
-    suspend fun getCameraUrl(userId: String): String {
-        val user = userRepository.findByUserId(userId)
-            ?: throw BusinessException(ErrorCode.USER_NOT_FOUND)
-        return user.cameraUrl ?: throw BusinessException(ErrorCode.CAMERA_NOT_FOUND)
-    }
+    suspend fun getDevices(userId: String): List<DeviceResponse> =
+        deviceRepository.findAllByUserId(userId)
 
-    suspend fun updateCameraUrl(userId: String, request: CameraUrlRequest) {
-        val user = userRepository.findByUserId(userId)
-            ?: throw BusinessException(ErrorCode.USER_NOT_FOUND)
-        userRepository.save(user.copy(cameraUrl = request.cameraUrl))
-    }
+    suspend fun getCameraUrl(userId: String): String =
+        deviceRepository.findCameraUrlByUserId(userId)
+            ?: throw BusinessException(ErrorCode.CAMERA_NOT_FOUND)
 
-    private fun colorCodeOf(level: String) = when (level) {
-        "위험" -> "#FF0000"
-        "주의" -> "#FFA500"
-        else   -> "#00C853"
+    suspend fun updateCameraUrl(deviceId: String, request: CameraUrlRequest, requesterId: String) {
+        val ownerId = deviceRepository.findUserIdByDeviceId(deviceId)
+            ?: throw BusinessException(ErrorCode.DEVICE_NOT_FOUND)
+        if (ownerId != requesterId) throw BusinessException(ErrorCode.FORBIDDEN)
+        deviceRepository.updateCameraUrl(deviceId, request.cameraUrl)
     }
 
     companion object {
-        fun calculateLevel(score: Float) = when {
-            score > 0.7f -> "위험"
-            score > 0.4f -> "주의"
-            else         -> "정상"
-        }
+        fun calculateLevel(score: Float) = RiskLevel.fromScore(score).label
     }
 }

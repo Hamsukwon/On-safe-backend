@@ -1,12 +1,15 @@
 package com.onsafe.backend.domain.notification.service
 
+import com.google.firebase.messaging.FirebaseMessaging
+import com.google.firebase.messaging.Message
+import com.google.firebase.messaging.Notification
 import com.onsafe.backend.common.exception.BusinessException
 import com.onsafe.backend.common.exception.ErrorCode
+import com.onsafe.backend.common.util.await
 import com.onsafe.backend.domain.notification.model.dto.NotificationRequest
 import com.onsafe.backend.domain.notification.model.dto.NotificationResponse
 import com.onsafe.backend.domain.user.repository.UserRepository
 import org.springframework.stereotype.Service
-import java.util.UUID
 
 @Service
 class NotificationService(private val userRepository: UserRepository) {
@@ -18,17 +21,20 @@ class NotificationService(private val userRepository: UserRepository) {
         val fcmToken = user.fcmToken
             ?: return NotificationResponse(status = "ok", message = "FCM 토큰이 없습니다.", fcmMessageId = "")
 
-        /*
-         * FCM 실제 발송 (Firebase Admin SDK 활성화 후 아래 코드로 교체):
-         *
-         * val messageBuilder = Message.builder()
-         *     .setToken(fcmToken)
-         *     .setNotification(Notification.builder().setTitle(request.title).setBody(request.body).build())
-         * request.data?.forEach { (k, v) -> messageBuilder.putData(k, v) }
-         * val messageId = FirebaseMessaging.getInstance().sendAsync(messageBuilder.build()).await()
-         */
-        val messageId = "projects/onsafe/messages/${UUID.randomUUID()}"
-
-        return NotificationResponse(status = "ok", message = "알림 전송 완료", fcmMessageId = messageId)
+        val messageBuilder = Message.builder()
+            .setToken(fcmToken)
+            .setNotification(
+                Notification.builder()
+                    .setTitle(request.title)
+                    .setBody(request.body)
+                    .build()
+            )
+        request.data?.forEach { (k, v) -> messageBuilder.putData(k, v) }
+        return try {
+            val messageId = FirebaseMessaging.getInstance().sendAsync(messageBuilder.build()).await()
+            NotificationResponse(status = "ok", message = "알림 전송 완료", fcmMessageId = messageId)
+        } catch (e: Exception) {
+            NotificationResponse(status = "error", message = "FCM 전송 실패: ${e.message}", fcmMessageId = "")
+        }
     }
 }

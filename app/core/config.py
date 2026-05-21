@@ -3,10 +3,12 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     firebase_credentials: str = "serviceAccountKey.json"
+    firebase_storage_bucket: str = ""  # e.g. "your-project.appspot.com"
     redis_url: str = "redis://localhost:6379"
     jwt_secret: str = "change-me-to-a-32-char-secret-key"
     jwt_access_expiry: int = 3600
     jwt_refresh_expiry: int = 604800
+    kotlin_internal_base: str = "http://localhost:8080"
 
     model_config = {"env_file": ".env"}
 
