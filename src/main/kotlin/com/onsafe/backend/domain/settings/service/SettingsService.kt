@@ -26,6 +26,8 @@ class SettingsService(
             settingsRepository.save(
                 settings.copy(
                     notificationEnabled = request.notificationEnabled ?: settings.notificationEnabled,
+                    soundEnabled = request.soundEnabled ?: settings.soundEnabled,
+                    vibrationEnabled = request.vibrationEnabled ?: settings.vibrationEnabled,
                     fallSensitivity = request.fallSensitivity ?: settings.fallSensitivity
                 )
             )
