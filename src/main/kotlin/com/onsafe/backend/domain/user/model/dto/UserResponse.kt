@@ -8,6 +8,8 @@ data class UserResponse(
     val name: String,
     val mail: String,
     val phone: String,
+    val address: String?,
+    val addressDetail: String?,
     val createdAt: LocalDateTime
 ) {
     companion object {
@@ -16,6 +18,8 @@ data class UserResponse(
             name = user.name,
             mail = user.mail,
             phone = user.phone,
+            address = user.address,
+            addressDetail = user.addressDetail,
             createdAt = user.createdAt
         )
     }

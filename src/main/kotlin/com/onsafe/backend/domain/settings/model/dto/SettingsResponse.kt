@@ -4,11 +4,15 @@ import com.onsafe.backend.domain.settings.model.entity.UserSettings
 
 data class NotificationSettingsResponse(
     val notificationEnabled: Boolean,
+    val soundEnabled: Boolean,
+    val vibrationEnabled: Boolean,
     val fallSensitivity: String
 ) {
     companion object {
         fun from(s: UserSettings) = NotificationSettingsResponse(
             notificationEnabled = s.notificationEnabled,
+            soundEnabled = s.soundEnabled,
+            vibrationEnabled = s.vibrationEnabled,
             fallSensitivity = s.fallSensitivity
         )
     }
