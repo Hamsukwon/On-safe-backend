@@ -1,7 +1,7 @@
 
 # On-safe-backend 프로젝트 구조
 
-> 최종 수정일: 2026-05-17 (feature/parent-main)
+> 최종 수정일: 2026-05-25 (feature/ses-email-migration)
 
 ---
 
@@ -73,6 +73,7 @@ src/main/kotlin/com/onsafe/backend/
 │   ├── FirebaseConfig.kt         ✅ Firebase Admin SDK 초기화
 │   ├── RedisConfig.kt            ✅ ByteArray Redis 템플릿, pub/sub 리스너 컨테이너 등록
 │   ├── SecurityConfig.kt         ✅ Spring Security — JWT 필터 등록, 공개/보호 경로 분리
+│   ├── SesConfig.kt              ✅ AWS SES SesAsyncClient Bean 등록 (aws.ses.region 환경변수)
 │   ├── SwaggerConfig.kt          ✅ SpringDoc OpenAPI — /swagger-ui.html 설정
 │   └── WebSocketConfig.kt        ✅ /ws/camera/** → CameraStreamWebSocketHandler 라우팅
 ├── common/
@@ -110,7 +111,7 @@ src/main/kotlin/com/onsafe/backend/
     │   │   └── VerifyResetCodeRequest.kt  ✅ 비밀번호 재설정 코드 확인 요청
     │   └── service/
     │       ├── AuthService.kt     ✅ 로그인·회원가입·이메일인증·비밀번호재설정 로직
-    │       └── EmailService.kt    ✅ SMTP 이메일 발송 (인증코드, 재설정코드)
+    │       └── EmailService.kt    ✅ AWS SES SDK 이메일 발송 (인증코드, 재설정코드)
     ├── camera/
     │   ├── controller/
     │   │   ├── CameraController.kt        ✅ PUT /api/camera/url, 위험점수·상태·colorCode 조회
@@ -170,18 +171,18 @@ src/main/kotlin/com/onsafe/backend/
     │       └── NotificationService.kt   ✅ Firebase FCM 메시지 발송 (FCM 오류 try/catch 처리 — 토큰 무효 시 낙상 로그 저장은 유지)
     ├── settings/
     │   ├── controller/
-    │   │   └── SettingsController.kt    ✅ /api/settings/* 알림설정·보관기간 GET/PUT
+    │   │   └── SettingsController.kt    ✅ GET/PUT /notifications/{userId}, GET /retention/{userId}
+    │   │                                   (retention 보관기간 고정 30일 — PUT 없음)
     │   ├── model/
     │   │   ├── dto/
-    │   │   │   ├── NotificationSettingsRequest.kt ✅ 알림 설정 변경 요청
-    │   │   │   ├── RetentionSettingsRequest.kt    ✅ 보관 기간 변경 요청
-    │   │   │   └── SettingsResponse.kt            ✅ 설정 조회 응답
+    │   │   │   ├── NotificationSettingsRequest.kt ✅ 알림 설정 변경 요청 (notification/sound/vibration)
+    │   │   │   └── SettingsResponse.kt            ✅ 알림 설정 응답 / 보관기간 응답 (고정 30일)
     │   │   └── entity/
-    │   │       └── UserSettings.kt      ✅ Firestore settings 엔티티
+    │   │       └── UserSettings.kt      ✅ Firestore settings 엔티티 (notification/sound/vibration)
     │   ├── repository/
-    │   │   └── SettingsRepository.kt    ✅ Firestore settings CRUD
+    │   │   └── SettingsRepository.kt    ✅ Firestore settings CRUD (fall_sensitivity·retention_days 제거)
     │   └── service/
-    │       └── SettingsService.kt       ✅ 알림설정·보관기간 조회·변경 로직
+    │       └── SettingsService.kt       ✅ 알림설정 조회·변경 / 보관기간 상수 30 반환
     └── user/
         ├── controller/
         │   └── UserController.kt        ✅ GET/PUT/DELETE /api/users/{userId}
@@ -360,10 +361,10 @@ docs/
 
 | 결과 | 엔드포인트 | 비고 |
 |------|-----------|------|
-| ✅ | `GET /api/settings/notifications/{userId}` | |
-| ✅ | `PUT /api/settings/notifications/{userId}` | |
-| ✅ | `GET /api/settings/retention/{userId}` | |
-| ✅ | `PUT /api/settings/retention/{userId}` | |
+| ✅ | `GET /api/settings/notifications/{userId}` | notificationEnabled, soundEnabled, vibrationEnabled |
+| ✅ | `PUT /api/settings/notifications/{userId}` | fallSensitivity 제거됨 |
+| ✅ | `GET /api/settings/retention/{userId}` | 항상 retentionDays: 30 반환 |
+| — | `PUT /api/settings/retention/{userId}` | 제거됨 (서버 고정 30일) |
 
 #### Notification
 

@@ -5,6 +5,4 @@ data class UserSettings(
     val notificationEnabled: Boolean = true,
     val soundEnabled: Boolean = true,
     val vibrationEnabled: Boolean = true,
-    val fallSensitivity: String = "medium",
-    val retentionDays: Int = 30
 )

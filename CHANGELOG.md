@@ -1,4 +1,29 @@
-# Changelog
+  # Changelog
+
+## [Unreleased] - feature/ses-email-migration
+
+---
+
+### 2026-05-25 — 이메일 발송 AWS SES 전환 + 설정 항목 정리
+
+**변경 파일:** `EmailService.kt`, `SesConfig.kt` (신규), `UserSettings.kt`, `SettingsRepository.kt`, `NotificationSettingsRequest.kt`, `SettingsResponse.kt`, `SettingsService.kt`, `SettingsController.kt`, `RetentionSettingsRequest.kt` (삭제), `SettingsServiceTest.kt`
+
+#### Changed
+- **`EmailService.kt`**: Google SMTP(`JavaMailSender`) → AWS SES SDK(`SesAsyncClient`) 전환. `sesClient.sendEmail()` + 코루틴 `await()`으로 비동기 발송, `SesException` 캐치 후 `MAIL_SEND_FAILED` BusinessException 변환
+- **`UserSettings.kt`**: `fallSensitivity`, `retentionDays` 필드 제거 — 알림 토글 3개(`notificationEnabled`, `soundEnabled`, `vibrationEnabled`)만 유지
+- **`SettingsRepository.kt`**: `toSettings()` / `toMap()`에서 `fall_sensitivity`, `retention_days` Firestore read/write 제거
+- **`SettingsResponse.kt`**: `NotificationSettingsResponse`에서 `fallSensitivity` 제거; `RetentionSettingsResponse`를 상수 30 반환 형태로 단순화
+- **`SettingsService.kt`**: `updateNotifications()`에서 `fallSensitivity` copy 제거; `getRetentionSettings()`을 `RetentionSettingsResponse()` 상수 반환으로 변경; `updateRetention()` 메서드 제거
+- **`SettingsController.kt`**: `PUT /api/settings/retention/{userId}` 엔드포인트 제거
+
+#### Added
+- **`SesConfig.kt`**: `SesAsyncClient` Bean 등록. `aws.ses.region` 환경변수 기반 Region 설정
+
+#### Removed
+- **`RetentionSettingsRequest.kt`**: 파일 삭제 — PUT retention 엔드포인트 제거로 사용처 없음
+- **`NotificationSettingsRequest.kt`**: `fallSensitivity` 필드 제거
+
+---
 
 ## [Unreleased] - feature/parent-main
 

@@ -5,7 +5,6 @@ import com.onsafe.backend.common.exception.ErrorCode
 import com.onsafe.backend.common.response.ApiResponse
 import com.onsafe.backend.domain.settings.model.dto.NotificationSettingsRequest
 import com.onsafe.backend.domain.settings.model.dto.NotificationSettingsResponse
-import com.onsafe.backend.domain.settings.model.dto.RetentionSettingsRequest
 import com.onsafe.backend.domain.settings.model.dto.RetentionSettingsResponse
 import com.onsafe.backend.domain.settings.service.SettingsService
 import io.swagger.v3.oas.annotations.Operation
@@ -49,16 +48,5 @@ class SettingsController(private val settingsService: SettingsService) {
     ): ApiResponse<RetentionSettingsResponse> {
         if (principal != userId) throw BusinessException(ErrorCode.FORBIDDEN)
         return ApiResponse.ok(settingsService.getRetentionSettings(userId))
-    }
-
-    @Operation(summary = "로그 보관 기간 변경", security = [SecurityRequirement(name = "BearerAuth")])
-    @PutMapping("/retention/{userId}")
-    suspend fun updateRetention(
-        @PathVariable userId: String,
-        @Valid @RequestBody request: RetentionSettingsRequest,
-        @AuthenticationPrincipal principal: String
-    ): ApiResponse<RetentionSettingsResponse> {
-        if (principal != userId) throw BusinessException(ErrorCode.FORBIDDEN)
-        return ApiResponse.ok(settingsService.updateRetention(userId, request), "영상 보관 기간이 설정되었습니다.")
     }
 }
