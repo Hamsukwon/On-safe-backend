@@ -1,7 +1,7 @@
 
 # On-safe-backend 프로젝트 구조
 
-> 최종 수정일: 2026-05-25 (feature/ses-email-migration)
+> 최종 수정일: 2026-05-27 (feature/ses-email-migration)
 
 ---
 
@@ -79,13 +79,20 @@ src/main/kotlin/com/onsafe/backend/
 ├── common/
 │   ├── exception/
 │   │   ├── BusinessException.kt      ✅ 비즈니스 예외 클래스 (ErrorCode 래핑)
-│   │   ├── ErrorCode.kt              ✅ 에러코드 enum — USER_NOT_FOUND, THUMBNAIL_NOT_FOUND 등
+│   │   ├── ErrorCode.kt              ✅ 에러코드 enum — USER_NOT_FOUND, THUMBNAIL_NOT_FOUND,
+│   │   │                                FCM_SEND_FAILED, EXPIRED_TOKEN, INVALID_TOKEN 등
 │   │   └── GlobalExceptionHandler.kt ✅ 전역 예외 처리 → ApiResponse.fail() 반환
+│   │                                    BusinessException / WebExchangeBindException /
+│   │                                    ServerWebInputException / MethodNotAllowedException(405) /
+│   │                                    Exception(500) 핸들러 등록
 │   ├── response/
 │   │   └── ApiResponse.kt            ✅ 공통 응답 래퍼 { success, message, data }
 │   ├── security/
 │   │   ├── JwtAuthenticationFilter.kt ✅ 요청마다 JWT 검증, 블랙리스트 확인, WS userId 검증
+│   │   │                                 만료/무효/블랙리스트 토큰 → JSON 401 즉시 반환
+│   │   │                                 (기존: 필터 통과 → Spring Security 403)
 │   │   └── JwtProvider.kt             ✅ JWT 생성·검증·파싱 (userId, email, 만료시간)
+│   │                                     getValidationError(): EXPIRED_TOKEN / INVALID_TOKEN 구분
 │   ├── storage/
 │   │   └── StorageService.kt          ✅ GCS V4 Signed URL 발급 (ServiceAccountCredentials,
 │   │                                     기본 1시간 유효, generateSignedUrl())
@@ -112,6 +119,8 @@ src/main/kotlin/com/onsafe/backend/
     │   └── service/
     │       ├── AuthService.kt     ✅ 로그인·회원가입·이메일인증·비밀번호재설정 로직
     │       └── EmailService.kt    ✅ AWS SES SDK 이메일 발송 (인증코드, 재설정코드)
+│                                 SdkClientException(네트워크/타임아웃) + SesException(서비스 오류)
+│                                 양쪽 모두 MAIL_SEND_FAILED 변환, 로그 레벨 구분(error/warn)
     ├── camera/
     │   ├── controller/
     │   │   ├── CameraController.kt        ✅ PUT /api/camera/url, 위험점수·상태·colorCode 조회
@@ -146,6 +155,8 @@ src/main/kotlin/com/onsafe/backend/
     │       └── InternalService.kt       ✅ publishFrame · saveFallLog · updateRealtime
     │                                       - fall/score≥76: 위험·낙상 FCM 알림
     │                                       - score 51~75: 주의 FCM 알림 (Python 쿨다운으로 빈도 제한)
+    │                                       - sendNotificationSafe(): FCM 실패 흡수(runCatching)
+    │                                         DB 저장·FCM 전송 독립 동작, 재시도 안전성 보장
     ├── logs/
     │   ├── controller/
     │   │   └── FallLogController.kt     ✅ /api/fall-logs/*
@@ -168,7 +179,9 @@ src/main/kotlin/com/onsafe/backend/
     │   │   ├── NotificationRequest.kt   ✅ FCM 알림 전송 요청
     │   │   └── NotificationResponse.kt  ✅ FCM 전송 결과 응답 (messageId 포함)
     │   └── service/
-    │       └── NotificationService.kt   ✅ Firebase FCM 메시지 발송 (FCM 오류 try/catch 처리 — 토큰 무효 시 낙상 로그 저장은 유지)
+    │       └── NotificationService.kt   ✅ Firebase FCM 메시지 발송
+│                                       FCM 실패 시 BusinessException(FCM_SEND_FAILED) throw
+│                                       FCM 토큰 없으면 예외 없이 ok 반환 (정상 케이스)
     ├── settings/
     │   ├── controller/
     │   │   └── SettingsController.kt    ✅ GET/PUT /notifications/{userId}, GET /retention/{userId}
@@ -197,6 +210,24 @@ src/main/kotlin/com/onsafe/backend/
         │   └── UserRepository.kt        ✅ Firestore users CRUD
         └── service/
             └── UserService.kt           ✅ 유저 조회·수정·탈퇴 비즈니스 로직
+
+src/test/kotlin/com/onsafe/backend/
+├── domain/
+│   ├── auth/
+│   │   ├── AuthServiceTest.kt        ✅ 로그인·회원가입·아이디찾기·코드검증·토큰갱신 예외 경로 (16개)
+│   │   └── EmailServiceTest.kt       ✅ SdkClientException·SesException → MAIL_SEND_FAILED (4개)
+│   ├── camera/
+│   │   └── CameraServiceTest.kt      ✅ REALTIME_DATA_NOT_FOUND·CAMERA_NOT_FOUND·FORBIDDEN 등 (5개)
+│   ├── internal/
+│   │   └── InternalServiceTest.kt    ✅ FCM 실패 시 DB 저장 보장·점수별 알림 조건 (6개)
+│   ├── logs/
+│   │   └── FallLogServiceTest.kt     ✅ LOG_NOT_FOUND·THUMBNAIL_NOT_FOUND (5개)
+│   ├── notification/
+│   │   └── NotificationServiceTest.kt ✅ USER_NOT_FOUND·FCM 토큰 없음·FCM 성공·FCM_SEND_FAILED (4개)
+│   ├── settings/
+│   │   └── SettingsServiceTest.kt    ✅ 알림 설정 조회·변경·기본값 생성 (6개, 기존)
+│   └── user/
+│       └── UserServiceTest.kt        ✅ 주소·비밀번호 수정·프로필 조회 (5개, 기존)
 
 src/main/resources/
 ├── application.yml               ✅ Kotlin 서버 설정 (Redis, Firebase, JWT, SMTP, Swagger,
@@ -281,6 +312,12 @@ docs/
 ### 7. Android Studio — "Unresolved reference 'OnSafeApplication'"
 - 코드 버그 아님 — Gradle sync 미완료로 인한 IDE 표시 오류
 - 해결: **File → Sync Project with Gradle Files**
+
+### 8. JWT 토큰 오류 응답 (2026-05-27 변경)
+- 만료 토큰: `401 {"success":false,"message":"만료된 토큰입니다.","data":null}`
+- 무효/위조 토큰: `401 {"success":false,"message":"유효하지 않은 토큰입니다.","data":null}`
+- 블랙리스트(로그아웃) 토큰: 동일하게 `401 INVALID_TOKEN` JSON 반환
+- 공개 경로(`/api/auth/**`)에도 잘못된 토큰 포함 시 즉시 401 반환 (정상 설계 — 공개 경로에 토큰 불필요)
 
 ---
 
@@ -412,5 +449,5 @@ docs/
 | 2026-05-13 | 내부 API JSON 필드명 camelCase → snake_case | ✅ 수정 완료 |
 | 2026-05-13 | `realtime_data` Firestore 복합 인덱스 누락 | ✅ 해소 — 현재 구조는 `userId` 단일 문서 덮어쓰기(복합 인덱스 불필요) |
 | 2026-05-17 | 주의(51~75) 이벤트 미저장·알림 없음 | ✅ Python 쿨다운 + Kotlin 분기 구현 완료 |
-| 2026-05-19 | `POST /internal/fall-log` FCM 토큰 무효 시 500 (`NotificationService` Firebase 예외 미처리) | ✅ try/catch 추가 — FCM 실패 시 낙상 로그 저장 유지, 200 반환 |
+| 2026-05-19 | `POST /internal/fall-log` FCM 토큰 무효 시 500 (`NotificationService` Firebase 예외 미처리) | ✅ 구조 개선 (2026-05-27) — FCM 실패 시 `BusinessException(FCM_SEND_FAILED)` throw, `InternalService.sendNotificationSafe()`에서 흡수. DB 저장·FCM 전송 독립 보장 |
 | 2026-05-19 | Python `GET /api/devices/{userId}` 405 (라우터에 GET 미등록) | ✅ `router.py` GET 엔드포인트 + `service.py` `get_devices()` 추가 |

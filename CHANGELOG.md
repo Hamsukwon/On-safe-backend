@@ -1,6 +1,47 @@
-  # Changelog
+# Changelog
 
 ## [Unreleased] - feature/ses-email-migration
+
+---
+
+### 2026-05-27 — 예외 처리 전면 강화 + 서비스 단위 테스트 추가
+
+**변경 파일:** `EmailService.kt`, `ErrorCode.kt`, `GlobalExceptionHandler.kt`, `JwtProvider.kt`, `JwtAuthenticationFilter.kt`, `NotificationService.kt`, `InternalService.kt`, `SettingsService.kt`
+
+**신규 테스트:** `EmailServiceTest.kt`, `AuthServiceTest.kt`, `CameraServiceTest.kt`, `FallLogServiceTest.kt`, `NotificationServiceTest.kt`, `InternalServiceTest.kt`
+
+#### Changed
+
+- **`EmailService.kt`**: `SdkClientException` catch 블록 추가 — 네트워크 단절·타임아웃 시 기존에는 unhandled exception으로 500 반환하던 문제 해결. `SesException` catch 내 `awsErrorDetails()?.errorMessage()` null-safe 호출로 NPE 방지. 두 예외 모두 `MAIL_SEND_FAILED`로 변환
+
+- **`JwtProvider.kt`**: `getValidationError(): ErrorCode?` 추가 — `ExpiredJwtException` → `EXPIRED_TOKEN`, 그 외 → `INVALID_TOKEN` 구분 반환. `validate()`는 `getValidationError() == null` 위임으로 단순화
+
+- **`JwtAuthenticationFilter.kt`**: `validate()` → `getValidationError()` 전환. 만료/무효 토큰 시 필터 통과(기존) 대신 `writeErrorResponse()`로 즉시 JSON `401` 반환. 블랙리스트 토큰도 빈 응답(기존) 대신 `INVALID_TOKEN` 메시지 포함 JSON `401` 반환
+
+- **`NotificationService.kt`**: FCM 실패 시 `NotificationResponse(status="error")` 반환(기존) → `log.warn` 후 `BusinessException(FCM_SEND_FAILED)` throw로 변경. 실패 여부가 예외로 명확히 전파됨
+
+- **`InternalService.kt`**: `sendNotificationSafe()` private 헬퍼 추출 — `runCatching`으로 FCM 예외 흡수 + `log.error` 기록. DB 저장과 FCM 전송이 독립 동작하여 재시도 안전성 보장
+
+- **`SettingsService.getRetentionSettings()`**: 의도적 유저 존재 검증 생략 주석 추가
+
+#### Added
+
+- **`ErrorCode.FCM_SEND_FAILED`**: `500` — "알림 전송에 실패했습니다." 추가
+
+- **`GlobalExceptionHandler`**: `MethodNotAllowedException` 핸들러 추가 — 미지원 HTTP 메서드 요청 시 기존 500 대신 `405` 반환
+
+- **테스트 51개 추가** (MockK + kotlinx-coroutines-test 기반)
+
+| 테스트 파일 | 케이스 수 | 주요 검증 항목 |
+|---|---|---|
+| `EmailServiceTest` | 4 | SdkClientException·SesException → MAIL_SEND_FAILED, 성공 |
+| `AuthServiceTest` | 16 | 로그인·회원가입·아이디찾기·코드검증·토큰갱신 전 예외 경로 |
+| `CameraServiceTest` | 5 | REALTIME_DATA_NOT_FOUND·CAMERA_NOT_FOUND·DEVICE_NOT_FOUND·FORBIDDEN |
+| `FallLogServiceTest` | 5 | LOG_NOT_FOUND·THUMBNAIL_NOT_FOUND |
+| `NotificationServiceTest` | 4 | USER_NOT_FOUND·FCM 토큰 없음·FCM 성공·FCM_SEND_FAILED |
+| `InternalServiceTest` | 6 | FCM 실패 시 DB 저장 보장·점수별 알림 조건·data 필드 검증 |
+| `UserServiceTest` (기존) | 5 | — |
+| `SettingsServiceTest` (기존) | 6 | — |
 
 ---
 
