@@ -113,6 +113,7 @@ docker-compose up --build
 | 문서 | 내용 |
 |---|---|
 | [`docs/project-structure.md`](docs/project-structure.md) | 전체 파일 구조·역할·API 테스트 결과 |
+| [`docs/ses-email-verification.md`](docs/ses-email-verification.md) | AWS SES 이메일 인증번호 발송 구현 상세 |
 | [`docs/camera-streaming-implementation.md`](docs/camera-streaming-implementation.md) | 실시간 스트리밍 구현 상세 |
 | [`docs/unimplemented-items.md`](docs/unimplemented-items.md) | 미구현 항목 (#1 나이/관계, MP4 영상) |
 | [`CHANGELOG.md`](CHANGELOG.md) | 브랜치별 변경 이력 |
