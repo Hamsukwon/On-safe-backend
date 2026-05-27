@@ -7,17 +7,18 @@ import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import software.amazon.awssdk.core.exception.SdkClientException
-import software.amazon.awssdk.services.ses.SesAsyncClient
-import software.amazon.awssdk.services.ses.model.Body
-import software.amazon.awssdk.services.ses.model.Content
-import software.amazon.awssdk.services.ses.model.Destination
-import software.amazon.awssdk.services.ses.model.Message
-import software.amazon.awssdk.services.ses.model.SendEmailRequest
-import software.amazon.awssdk.services.ses.model.SesException
+import software.amazon.awssdk.services.sesv2.SesV2AsyncClient
+import software.amazon.awssdk.services.sesv2.model.Body
+import software.amazon.awssdk.services.sesv2.model.Content
+import software.amazon.awssdk.services.sesv2.model.Destination
+import software.amazon.awssdk.services.sesv2.model.EmailContent
+import software.amazon.awssdk.services.sesv2.model.Message
+import software.amazon.awssdk.services.sesv2.model.SendEmailRequest
+import software.amazon.awssdk.services.sesv2.model.SesV2Exception
 
 @Service
 class EmailService(
-    private val sesClient: SesAsyncClient,
+    private val sesClient: SesV2AsyncClient,
     @Value("\${aws.ses.from}") private val fromEmail: String
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
@@ -52,14 +53,18 @@ class EmailService(
         try {
             sesClient.sendEmail(
                 SendEmailRequest.builder()
-                    .source(fromEmail)
+                    .fromEmailAddress(fromEmail)
                     .destination(Destination.builder().toAddresses(to).build())
-                    .message(
-                        Message.builder()
-                            .subject(Content.builder().data(subject).charset("UTF-8").build())
-                            .body(
-                                Body.builder()
-                                    .text(Content.builder().data(body).charset("UTF-8").build())
+                    .content(
+                        EmailContent.builder()
+                            .simple(
+                                Message.builder()
+                                    .subject(Content.builder().data(subject).charset("UTF-8").build())
+                                    .body(
+                                        Body.builder()
+                                            .text(Content.builder().data(body).charset("UTF-8").build())
+                                            .build()
+                                    )
                                     .build()
                             )
                             .build()
@@ -69,7 +74,7 @@ class EmailService(
         } catch (e: SdkClientException) {
             log.error("SES 연결 실패 (수신: $to): ${e.message}", e)
             throw BusinessException(ErrorCode.MAIL_SEND_FAILED)
-        } catch (e: SesException) {
+        } catch (e: SesV2Exception) {
             log.warn("SES 발송 거부 (수신: $to, 코드: ${e.statusCode()}): ${e.awsErrorDetails()?.errorMessage()}")
             throw BusinessException(ErrorCode.MAIL_SEND_FAILED)
         }

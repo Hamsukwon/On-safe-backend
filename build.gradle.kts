@@ -47,7 +47,7 @@ dependencies {
 
     // AWS SDK v2 — SES 이메일 발송
     implementation(platform("software.amazon.awssdk:bom:2.25.0"))
-    implementation("software.amazon.awssdk:ses")
+    implementation("software.amazon.awssdk:sesv2")
 
     // CompletableFuture.await() — SesAsyncClient 코루틴 연동
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-jdk8")
