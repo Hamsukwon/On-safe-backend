@@ -2,10 +2,6 @@ package com.onsafe.backend.common.exception
 
 import org.springframework.http.HttpStatus
 
-/**
- * 애플리케이션 전역 에러 코드 정의
- * 새로운 도메인 에러는 해당 섹션에 추가
- */
 enum class ErrorCode(
     val status: HttpStatus,
     val message: String
@@ -40,5 +36,8 @@ enum class ErrorCode(
 
     // ── 이메일 인증 ────────────────────────────────────────
     INVALID_EMAIL_CODE(HttpStatus.BAD_REQUEST, "유효하지 않은 인증코드입니다. 코드가 만료되었거나 올바르지 않습니다."),
-    MAIL_SEND_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "이메일 발송에 실패했습니다.")
+    MAIL_SEND_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "이메일 발송에 실패했습니다."),
+
+    // ── 알림 ──────────────────────────────────────────────
+    FCM_SEND_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "알림 전송에 실패했습니다.")
 }

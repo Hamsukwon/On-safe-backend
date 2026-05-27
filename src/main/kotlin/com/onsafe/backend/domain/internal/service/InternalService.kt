@@ -9,6 +9,7 @@ import com.onsafe.backend.domain.logs.repository.FallLogRepository
 import com.onsafe.backend.domain.notification.model.dto.NotificationRequest
 import com.onsafe.backend.domain.notification.service.NotificationService
 import kotlinx.coroutines.reactive.awaitSingle
+import org.slf4j.LoggerFactory
 import org.springframework.data.redis.core.ReactiveStringRedisTemplate
 import org.springframework.stereotype.Service
 import java.util.Base64
@@ -20,6 +21,7 @@ class InternalService(
     private val notificationService: NotificationService,
     private val redisTemplate: ReactiveStringRedisTemplate
 ) {
+    private val log = LoggerFactory.getLogger(javaClass)
 
     suspend fun updateRealtime(req: UpdateRealtimeRequest) {
         val existing = realtimeDataRepository.findByUserId(req.userId)
@@ -42,7 +44,7 @@ class InternalService(
         )
         val notifData = mapOf("log_id" to req.logId, "user_id" to req.userId, "score" to req.score.toString())
         if (req.fall || req.score >= 76f) {
-            notificationService.sendNotification(
+            sendNotificationSafe(
                 NotificationRequest(
                     userId = req.userId,
                     title = if (req.fall) "낙상 감지 경보" else "위험 수준 감지",
@@ -51,7 +53,7 @@ class InternalService(
                 )
             )
         } else if (req.score >= 51f) {
-            notificationService.sendNotification(
+            sendNotificationSafe(
                 NotificationRequest(
                     userId = req.userId,
                     title = "주의 수준 감지",
@@ -60,6 +62,12 @@ class InternalService(
                 )
             )
         }
+    }
+
+    // FCM 실패는 이력 저장과 독립적으로 처리 — 전송 실패해도 DB 저장은 항상 보장
+    private suspend fun sendNotificationSafe(request: NotificationRequest) {
+        runCatching { notificationService.sendNotification(request) }
+            .onFailure { e -> log.error("FCM 전송 실패 (userId: ${request.userId}): ${e.message}", e) }
     }
 
     // JPEG 바이트를 Base64로 인코딩 후 Redis pub/sub으로 발행
