@@ -12,15 +12,15 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import software.amazon.awssdk.awscore.exception.AwsErrorDetails
 import software.amazon.awssdk.core.exception.SdkClientException
-import software.amazon.awssdk.services.ses.SesAsyncClient
-import software.amazon.awssdk.services.ses.model.SendEmailRequest
-import software.amazon.awssdk.services.ses.model.SendEmailResponse
-import software.amazon.awssdk.services.ses.model.SesException
+import software.amazon.awssdk.services.sesv2.SesV2AsyncClient
+import software.amazon.awssdk.services.sesv2.model.SendEmailRequest
+import software.amazon.awssdk.services.sesv2.model.SendEmailResponse
+import software.amazon.awssdk.services.sesv2.model.SesV2Exception
 import java.util.concurrent.CompletableFuture
 
 class EmailServiceTest {
 
-    private val sesClient: SesAsyncClient = mockk()
+    private val sesClient: SesV2AsyncClient = mockk()
     private lateinit var emailService: EmailService
 
     @BeforeEach
@@ -54,7 +54,7 @@ class EmailServiceTest {
     fun `SesException 발생 시 MAIL_SEND_FAILED 예외로 변환된다`() = runTest {
         val future = CompletableFuture<SendEmailResponse>()
         future.completeExceptionally(
-            SesException.builder()
+            SesV2Exception.builder()
                 .message("MessageRejected")
                 .statusCode(400)
                 .awsErrorDetails(
