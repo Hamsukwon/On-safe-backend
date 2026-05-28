@@ -4,7 +4,6 @@ import com.onsafe.backend.common.exception.BusinessException
 import com.onsafe.backend.common.exception.ErrorCode
 import com.onsafe.backend.domain.settings.model.dto.NotificationSettingsRequest
 import com.onsafe.backend.domain.settings.model.dto.NotificationSettingsResponse
-import com.onsafe.backend.domain.settings.model.dto.RetentionSettingsRequest
 import com.onsafe.backend.domain.settings.model.dto.RetentionSettingsResponse
 import com.onsafe.backend.domain.settings.model.entity.UserSettings
 import com.onsafe.backend.domain.settings.repository.SettingsRepository
@@ -28,19 +27,13 @@ class SettingsService(
                     notificationEnabled = request.notificationEnabled ?: settings.notificationEnabled,
                     soundEnabled = request.soundEnabled ?: settings.soundEnabled,
                     vibrationEnabled = request.vibrationEnabled ?: settings.vibrationEnabled,
-                    fallSensitivity = request.fallSensitivity ?: settings.fallSensitivity
                 )
             )
         )
     }
 
-    suspend fun getRetentionSettings(userId: String): RetentionSettingsResponse =
-        RetentionSettingsResponse.from(getOrCreateSettings(userId))
-
-    suspend fun updateRetention(userId: String, request: RetentionSettingsRequest): RetentionSettingsResponse =
-        RetentionSettingsResponse.from(
-            settingsRepository.save(getOrCreateSettings(userId).copy(retentionDays = request.retentionDays))
-        )
+    // 유저 존재 여부를 검증하지 않고 기본값 반환 — 신규 사용자도 설정 화면 진입 가능하도록 의도적으로 생략
+    suspend fun getRetentionSettings(userId: String): RetentionSettingsResponse = RetentionSettingsResponse()
 
     private suspend fun getOrCreateSettings(userId: String): UserSettings =
         settingsRepository.findByUserId(userId)

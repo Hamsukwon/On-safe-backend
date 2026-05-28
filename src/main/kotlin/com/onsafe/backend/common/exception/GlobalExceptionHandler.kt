@@ -7,6 +7,7 @@ import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 import org.springframework.web.bind.support.WebExchangeBindException
+import org.springframework.web.server.MethodNotAllowedException
 import org.springframework.web.server.ServerWebInputException
 
 @RestControllerAdvice
@@ -14,7 +15,6 @@ class GlobalExceptionHandler {
 
     private val log = LoggerFactory.getLogger(javaClass)
 
-    /** 비즈니스 로직 예외 처리 */
     @ExceptionHandler(BusinessException::class)
     fun handleBusinessException(e: BusinessException): ResponseEntity<ApiResponse<Nothing>> {
         return ResponseEntity
@@ -22,7 +22,6 @@ class GlobalExceptionHandler {
             .body(ApiResponse.fail(e.errorCode.message))
     }
 
-    /** 입력값 유효성 검사 실패 */
     @ExceptionHandler(WebExchangeBindException::class)
     fun handleValidationException(e: WebExchangeBindException): ResponseEntity<ApiResponse<Nothing>> {
         val message = e.bindingResult.fieldErrors
@@ -48,7 +47,13 @@ class GlobalExceptionHandler {
             .body(ApiResponse.fail(message))
     }
 
-    /** 그 외 예상치 못한 예외 */
+    @ExceptionHandler(MethodNotAllowedException::class)
+    fun handleMethodNotAllowed(e: MethodNotAllowedException): ResponseEntity<ApiResponse<Nothing>> {
+        return ResponseEntity
+            .status(HttpStatus.METHOD_NOT_ALLOWED)
+            .body(ApiResponse.fail("지원하지 않는 HTTP 메서드입니다."))
+    }
+
     @ExceptionHandler(Exception::class)
     fun handleException(e: Exception): ResponseEntity<ApiResponse<Nothing>> {
         log.error("Unhandled exception: ${e::class.simpleName} - ${e.message}", e)

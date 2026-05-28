@@ -1,6 +1,8 @@
 package com.onsafe.backend.common.security
 
+import com.onsafe.backend.common.exception.ErrorCode
 import io.jsonwebtoken.Claims
+import io.jsonwebtoken.ExpiredJwtException
 import io.jsonwebtoken.Jwts
 import io.jsonwebtoken.security.Keys
 import org.springframework.beans.factory.annotation.Value
@@ -31,9 +33,20 @@ class JwtProvider(
     fun getEmail(token: String): String =
         parseClaims(token).subject
 
-    fun validate(token: String): Boolean = runCatching {
-        parseClaims(token).expiration.after(Date())
-    }.getOrDefault(false)
+    /**
+     * 토큰 유효성 검사 — 만료와 서명/형식 오류를 구분해 ErrorCode로 반환.
+     * null 이면 유효한 토큰.
+     */
+    fun getValidationError(token: String): ErrorCode? = try {
+        parseClaims(token)
+        null
+    } catch (e: ExpiredJwtException) {
+        ErrorCode.EXPIRED_TOKEN
+    } catch (e: Exception) {
+        ErrorCode.INVALID_TOKEN
+    }
+
+    fun validate(token: String): Boolean = getValidationError(token) == null
 
     fun getRemainingExpiry(token: String): Duration = runCatching {
         val remaining = parseClaims(token).expiration.time - System.currentTimeMillis()

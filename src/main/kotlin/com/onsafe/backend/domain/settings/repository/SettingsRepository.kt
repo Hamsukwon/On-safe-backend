@@ -30,15 +30,11 @@ class SettingsRepository(private val firestore: Firestore) {
         notificationEnabled = getBoolean("notification_enabled") ?: true,
         soundEnabled = getBoolean("sound_enabled") ?: true,
         vibrationEnabled = getBoolean("vibration_enabled") ?: true,
-        fallSensitivity = getString("fall_sensitivity") ?: "medium",
-        retentionDays = getLong("retention_days")?.toInt() ?: 30
     )
 
     private fun UserSettings.toMap() = mapOf(
         "notification_enabled" to notificationEnabled,
         "sound_enabled" to soundEnabled,
         "vibration_enabled" to vibrationEnabled,
-        "fall_sensitivity" to fallSensitivity,
-        "retention_days" to retentionDays
     )
 }

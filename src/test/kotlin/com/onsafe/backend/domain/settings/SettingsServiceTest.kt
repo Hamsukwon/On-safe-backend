@@ -24,8 +24,6 @@ class SettingsServiceTest {
         notificationEnabled = true,
         soundEnabled = true,
         vibrationEnabled = true,
-        fallSensitivity = "medium",
-        retentionDays = 30
     )
 
     @BeforeEach
@@ -98,7 +96,6 @@ class SettingsServiceTest {
         assertFalse(result.notificationEnabled)
         assertTrue(result.soundEnabled)
         assertTrue(result.vibrationEnabled)
-        assertEquals("medium", result.fallSensitivity)
     }
 
     @Test

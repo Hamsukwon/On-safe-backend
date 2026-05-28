@@ -6,22 +6,14 @@ data class NotificationSettingsResponse(
     val notificationEnabled: Boolean,
     val soundEnabled: Boolean,
     val vibrationEnabled: Boolean,
-    val fallSensitivity: String
 ) {
     companion object {
         fun from(s: UserSettings) = NotificationSettingsResponse(
             notificationEnabled = s.notificationEnabled,
             soundEnabled = s.soundEnabled,
             vibrationEnabled = s.vibrationEnabled,
-            fallSensitivity = s.fallSensitivity
         )
     }
 }
 
-data class RetentionSettingsResponse(
-    val retentionDays: Int
-) {
-    companion object {
-        fun from(s: UserSettings) = RetentionSettingsResponse(retentionDays = s.retentionDays)
-    }
-}
+data class RetentionSettingsResponse(val retentionDays: Int = 30)

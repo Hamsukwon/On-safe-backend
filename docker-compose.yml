@@ -36,8 +36,10 @@ services:
       FIREBASE_STORAGE_BUCKET: ${FIREBASE_STORAGE_BUCKET:?FIREBASE_STORAGE_BUCKET must be set}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
       SPRING_PROFILES_ACTIVE: docker
-      MAIL_USERNAME: ${MAIL_USERNAME:-}
-      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      AWS_REGION: ${AWS_REGION:-ap-northeast-2}
+      SES_FROM_EMAIL: ${SES_FROM_EMAIL:?SES_FROM_EMAIL must be set}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
     volumes:
       - ./serviceAccountKey.json:/app/secrets/serviceAccountKey.json:ro
     depends_on:

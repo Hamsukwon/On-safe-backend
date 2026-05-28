@@ -47,9 +47,23 @@
 | 설정 불러오기 | `GET /api/settings/notifications/{userId}` | notificationEnabled, soundEnabled, vibrationEnabled |
 | 설정 저장 | `PUT /api/settings/notifications/{userId}` | 변경된 토글만 전송 가능 |
 
+> `fallSensitivity` 항목은 AI 서버 내부 고정값으로 관리되며 설정 UI에 노출하지 않음
+
 ---
 
-### 4. 로그아웃
+### 4. 로그 보관 기간
+
+- 보관 기간은 서버 고정 **30일**
+- 클라이언트에서 변경 불가 (PUT API 없음)
+- `GET /api/settings/retention/{userId}` 호출 시 항상 `{ "retentionDays": 30 }` 반환
+
+| 구분 | API | 비고 |
+|------|-----|------|
+| 기간 조회 | `GET /api/settings/retention/{userId}` | 항상 30일 반환 |
+
+---
+
+### 5. 로그아웃
 
 - 확인 다이얼로그 후 로그아웃 처리
 - 서버 토큰 블랙리스트 등록 + 로컬 토큰 삭제
@@ -60,7 +74,7 @@
 
 ---
 
-### 5. 회원탈퇴
+### 6. 회원탈퇴
 
 - "회원탈퇴" 텍스트 직접 입력 후 버튼 활성화
 - 사용자 데이터 + 설정 데이터 서버에서 함께 삭제
@@ -71,7 +85,7 @@
 
 ---
 
-### 6. 개인정보 처리방침
+### 7. 개인정보 처리방침
 
 - 현재 미구현 (준비 중)
 - 추후 웹뷰 또는 외부 브라우저 연동 예정

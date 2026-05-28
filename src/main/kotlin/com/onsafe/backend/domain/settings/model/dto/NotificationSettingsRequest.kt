@@ -4,5 +4,4 @@ data class NotificationSettingsRequest(
     val notificationEnabled: Boolean? = null,
     val soundEnabled: Boolean? = null,
     val vibrationEnabled: Boolean? = null,
-    val fallSensitivity: String? = null
 )
