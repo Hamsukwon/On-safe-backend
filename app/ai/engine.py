@@ -1,221 +1,312 @@
 """
-AI 낙상 감지 엔진 — onsafeai.py 로직 기반
-MediaPipe Pose → 피처 계산 → Savitzky-Golay 필터 → ML 추론
+AI 낙상 감지 엔진 — OnSafe/ai-server/main.py 파이프라인 기반
+landmark JSON → 30프레임 슬라이딩 윈도우 → XGBoost 추론
+
+학습 파이프라인 대응:
+  Step2 → _step2_resolve_nan()       (4.Nan_Resolution.ipynb)
+  Step3 → _step3_smoothing_savgol()  (5.Smoothing_SGV.ipynb)
+  Step4 → _step4_pose_normalize()    (6.Scaling.ipynb)
+  Step5 → _step5_make_features()     (7.Make_Feature.ipynb)
+  Step6 → _step6_scale()             (Make_AI.ipynb)
 """
 import asyncio
-from collections import defaultdict, deque
+from collections import deque
 from pathlib import Path
 
-import cv2
 import joblib
-import mediapipe as mp
 import numpy as np
 import pandas as pd
 from scipy.signal import savgol_filter
 
+# ── 경로 상수 ──────────────────────────────────────────────────────────────────
 _PKL_DIR = Path(__file__).parent.parent.parent / "pkl"
-_WINDOW_SIZE = 5
-_POLY_ORDER = 2
 
-_joint_triplets = [
-    ('neck', 0, 11, 12), ('shoulder_balance', 11, 0, 12),
-    ('shoulder_left', 23, 11, 13), ('shoulder_right', 24, 12, 14),
-    ('elbow_left', 11, 13, 15), ('elbow_right', 12, 14, 16),
-    ('hip_left', 11, 23, 25), ('hip_right', 12, 24, 26),
-    ('knee_left', 23, 25, 27), ('knee_right', 24, 26, 28),
-    ('ankle_left', 25, 27, 31), ('ankle_right', 26, 28, 32),
-    ('torso_left', 0, 11, 23), ('torso_right', 0, 12, 24),
-    ('spine', 0, 23, 24),
+# ── 추론 파라미터 ──────────────────────────────────────────────────────────────
+WINDOW_SIZE        = 30    # 슬라이딩 윈도우 프레임 수
+STRIDE             = 5     # 추론 호출 간격 (프레임)
+WARNING_THRESHOLD  = 51.0  # 주의
+CRITICAL_THRESHOLD = 76.0  # 위험
+
+# ── 관절 트리플 / 피처 순서 (학습 파이프라인과 1:1 동일) ──────────────────────
+_JOINT_TRIPLETS = [
+    ('neck',             0, 11, 12),
+    ('shoulder_balance', 11,  0, 12),
+    ('shoulder_left',   23, 11, 13),
+    ('shoulder_right',  24, 12, 14),
+    ('elbow_left',      11, 13, 15),
+    ('elbow_right',     12, 14, 16),
+    ('hip_left',        11, 23, 25),
+    ('hip_right',       12, 24, 26),
+    ('knee_left',       23, 25, 27),
+    ('knee_right',      24, 26, 28),
+    ('ankle_left',      25, 27, 31),
+    ('ankle_right',     26, 28, 32),
+    ('torso_left',       0, 11, 23),
+    ('torso_right',      0, 12, 24),
+    ('spine',            0, 23, 24),
 ]
+_JOINTS_ORDER = [
+    'neck', 'shoulder_balance',
+    'shoulder_left', 'shoulder_right',
+    'elbow_left', 'elbow_right',
+    'hip_left', 'hip_right',
+    'knee_left', 'knee_right',
+    'torso_left', 'torso_right', 'spine',  # ankle보다 앞
+    'ankle_left', 'ankle_right',
+]
+FEATURE_COLUMNS: list[str] = []
+for _j in _JOINTS_ORDER:
+    FEATURE_COLUMNS += [
+        f'{_j}_angle',
+        f'{_j}_angular_velocity',
+        f'{_j}_angular_acceleration',
+    ]
+FEATURE_COLUMNS += ['center_distance', 'center_speed']
+assert len(FEATURE_COLUMNS) == 47, f"Feature 개수 불일치: {len(FEATURE_COLUMNS)}"
 
-# ── 싱글턴 모델 ──────────────────────────────────────────────────────────────
-
-_model = None
+# ── 싱글턴 모델 ────────────────────────────────────────────────────────────────
+_model  = None
 _scaler = None
-_pose = None
 
 
 def _load_models() -> None:
-    global _model, _scaler, _pose
-    model_path = _PKL_DIR / "decision_tree_model.pkl"
+    global _model, _scaler
+    model_path  = _PKL_DIR / "xgb_model.pkl"
     scaler_path = _PKL_DIR / "scaler.pkl"
-    if model_path.exists() and scaler_path.exists():
-        _model = joblib.load(model_path)
-        _scaler = joblib.load(scaler_path)
-    _pose = mp.solutions.pose.Pose(
-        static_image_mode=True,
-        model_complexity=1,
-        enable_segmentation=False,
-        min_detection_confidence=0.5,
-        min_tracking_confidence=0.5,
-    )
+    if not model_path.exists() or not scaler_path.exists():
+        raise RuntimeError(f"모델/스케일러 파일 없음: {model_path}, {scaler_path}")
+    _model  = joblib.load(model_path)
+    _scaler = joblib.load(scaler_path)
 
 
-# ── 기기별 상태 (Savitzky-Golay 버퍼 + 이전 프레임 값) ──────────────────────
-
-_device_state: dict[str, dict] = {}
-
-
-def _get_state(device_id: str) -> dict:
-    if device_id not in _device_state:
-        _device_state[device_id] = {
-            "kp_buf": {
-                f"kp{i}_{ax}": deque(maxlen=_WINDOW_SIZE)
-                for i in range(33)
-                for ax in ("x", "y", "z")
-            },
-            "prev_angles": {},
-            "prev_ang_vel": {},
-            "prev_center": None,
-            "prev_center_speed": 0.0,
-        }
-    return _device_state[device_id]
+# ── 기기별 프레임 버퍼 (Method A — deque 단일 책임) ───────────────────────────
+_frame_buffers: dict[str, deque] = {}
+_frame_counts:  dict[str, int]   = {}
 
 
-# ── 수학 헬퍼 ─────────────────────────────────────────────────────────────────
-
-def _compute_angle(a: np.ndarray, b: np.ndarray, c: np.ndarray) -> float:
-    ba, bc = a - b, c - b
-    cos = np.dot(ba, bc) / (np.linalg.norm(ba) * np.linalg.norm(bc) + 1e-8)
-    return float(np.degrees(np.arccos(np.clip(cos, -1.0, 1.0))))
+def _get_buffer(device_id: str) -> deque:
+    if device_id not in _frame_buffers:
+        _frame_buffers[device_id] = deque(maxlen=WINDOW_SIZE)
+    return _frame_buffers[device_id]
 
 
-def _savgol_smooth(row: dict, kp_buf: dict) -> dict:
-    out = row.copy()
-    for key, buf in kp_buf.items():
-        if key in row:
-            buf.append(row[key])
-            if len(buf) == _WINDOW_SIZE:
-                out[key] = float(savgol_filter(np.array(buf), _WINDOW_SIZE, _POLY_ORDER)[-1])
-    return out
+# ── 전처리 Step2 ───────────────────────────────────────────────────────────────
 
+def _step2_resolve_nan(df: pd.DataFrame, conf_threshold: float = 0.3) -> pd.DataFrame:
+    """visibility 기반 NaN 처리 → 3σ 이상치 제거 → 양방향 보간"""
+    df    = df.copy()
+    kp_x  = sorted([c for c in df.columns if c.endswith('_x')])
+    kp_y  = sorted([c for c in df.columns if c.endswith('_y')])
+    kp_z  = sorted([c for c in df.columns if c.endswith('_z')])
+    confs = sorted([c for c in df.columns if c.endswith('_visibility')])
 
-def _centralize(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
-    px = (df["kp23_x"] + df["kp24_x"]) / 2
-    py = (df["kp23_y"] + df["kp24_y"]) / 2
-    pz = (df["kp23_z"] + df["kp24_z"]) / 2
-    for col in df.columns:
-        if col.endswith("_x"):
-            df[col] -= px
-        elif col.endswith("_y"):
-            df[col] -= py
-        elif col.endswith("_z"):
-            df[col] -= pz
+    n_frames, n_joints = len(df), len(kp_x)
+    kp   = np.zeros((n_frames, n_joints, 3))
+    conf = np.zeros((n_frames, n_joints))
+    for j in range(n_joints):
+        kp[:, j, 0] = df[kp_x[j]]
+        kp[:, j, 1] = df[kp_y[j]]
+        kp[:, j, 2] = df[kp_z[j]]
+        conf[:, j]  = df[confs[j]]
+
+    kp[conf < conf_threshold] = np.nan
+
+    mean    = np.nanmean(kp, axis=(0, 1))
+    std     = np.nanstd(kp, axis=(0, 1))
+    outlier = (kp < mean - 3 * std) | (kp > mean + 3 * std)
+    kp[outlier] = np.nan
+
+    for f in range(n_frames):
+        for j in range(n_joints):
+            if np.isnan(kp[f, j, 0]):
+                prev_val, next_val = None, None
+                for p in range(f - 1, -1, -1):
+                    if not np.isnan(kp[p, j, 0]):
+                        prev_val = kp[p, j, :]; break
+                for q in range(f + 1, n_frames):
+                    if not np.isnan(kp[q, j, 0]):
+                        next_val = kp[q, j, :]; break
+                if prev_val is not None and next_val is not None:
+                    kp[f, j, :] = (prev_val + next_val) / 2
+                elif prev_val is not None:
+                    kp[f, j, :] = prev_val
+                elif next_val is not None:
+                    kp[f, j, :] = next_val
+
+    for j in range(n_joints):
+        df[kp_x[j]] = kp[:, j, 0]
+        df[kp_y[j]] = kp[:, j, 1]
+        df[kp_z[j]] = kp[:, j, 2]
+
+    num_cols = df.select_dtypes(include='number').columns
+    for c in num_cols:
+        df[c] = df[c].interpolate(method='cubic', limit_direction='both').ffill().bfill()
     return df
 
 
-def _scale_normalize(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
-    scale = np.sqrt(
-        (df["kp23_x"] - df["kp24_x"]) ** 2
-        + (df["kp23_y"] - df["kp24_y"]) ** 2
-        + (df["kp23_z"] - df["kp24_z"]) ** 2
-    ).replace(0, 1)
-    for col in df.columns:
-        if any(s in col for s in ("_x", "_y", "_z")):
-            df[col] /= scale
+# ── 전처리 Step3 ───────────────────────────────────────────────────────────────
+
+def _step3_smoothing_savgol(df: pd.DataFrame, window: int = 7, polyorder: int = 2) -> pd.DataFrame:
+    """윈도우 전체에 Savitzky-Golay 스무딩 적용"""
+    df         = df.copy()
+    coord_cols = [c for c in df.columns if c.endswith(('_x', '_y', '_z'))]
+    for col in coord_cols:
+        arr = df[col].to_numpy()
+        if len(arr) >= window:
+            df[col] = savgol_filter(arr, window_length=window, polyorder=polyorder, mode='interp')
     return df
 
 
-def _calculate_angles(row: dict, state: dict, fps: float = 30.0) -> dict:
-    result = {}
-    for j_name, a_idx, b_idx, c_idx in _joint_triplets:
-        try:
-            pts = [
-                np.array([row[f"kp{i}_x"], row[f"kp{i}_y"], row[f"kp{i}_z"]])
-                for i in (a_idx, b_idx, c_idx)
-            ]
-            angle = _compute_angle(*pts)
-            ang_vel = (angle - state["prev_angles"].get(f"{j_name}_angle", angle)) * fps
-            ang_acc = (ang_vel - state["prev_ang_vel"].get(f"{j_name}_angular_velocity", ang_vel)) * fps
-            result[f"{j_name}_angle"] = angle
-            result[f"{j_name}_angular_velocity"] = ang_vel
-            result[f"{j_name}_angular_acceleration"] = ang_acc
-            state["prev_angles"][f"{j_name}_angle"] = angle
-            state["prev_ang_vel"][f"{j_name}_angular_velocity"] = ang_vel
-        except KeyError:
-            result[f"{j_name}_angle"] = 0.0
-            result[f"{j_name}_angular_velocity"] = 0.0
-            result[f"{j_name}_angular_acceleration"] = 0.0
-    return result
+# ── 전처리 Step4 ───────────────────────────────────────────────────────────────
+
+def _step4_pose_normalize(df: pd.DataFrame, pelvis: tuple = (23, 24)) -> pd.DataFrame:
+    """골반 중앙정렬 + 두 골반 간 거리로 정규화"""
+    df  = df.copy()
+    px  = (df[f'kp{pelvis[0]}_x'] + df[f'kp{pelvis[1]}_x']) / 2
+    py  = (df[f'kp{pelvis[0]}_y'] + df[f'kp{pelvis[1]}_y']) / 2
+    pz  = (df[f'kp{pelvis[0]}_z'] + df[f'kp{pelvis[1]}_z']) / 2
+
+    kp_x = [c for c in df.columns if c.endswith('_x')]
+    kp_y = [c for c in df.columns if c.endswith('_y')]
+    kp_z = [c for c in df.columns if c.endswith('_z')]
+    for cx, cy, cz in zip(kp_x, kp_y, kp_z):
+        df[cx] -= px
+        df[cy] -= py
+        df[cz] -= pz
+
+    lx = df[f'kp{pelvis[0]}_x']; ly = df[f'kp{pelvis[0]}_y']; lz = df[f'kp{pelvis[0]}_z']
+    rx = df[f'kp{pelvis[1]}_x']; ry = df[f'kp{pelvis[1]}_y']; rz = df[f'kp{pelvis[1]}_z']
+    scale = np.sqrt((lx - rx) ** 2 + (ly - ry) ** 2 + (lz - rz) ** 2).replace(0, 1)
+    for cx, cy, cz in zip(kp_x, kp_y, kp_z):
+        df[cx] /= scale
+        df[cy] /= scale
+        df[cz] /= scale
+    return df
 
 
-def _center_dynamics(row: dict, state: dict, fps: float = 30.0) -> dict:
-    center = np.array([
-        (row.get("kp23_x", 0) + row.get("kp24_x", 0)) / 2,
-        (row.get("kp23_y", 0) + row.get("kp24_y", 0)) / 2,
-        (row.get("kp23_z", 0) + row.get("kp24_z", 0)) / 2,
-    ])
-    prev_c = state["prev_center"]
-    prev_s = state["prev_center_speed"]
-    disp = speed = acc = vel_change = 0.0
-    if prev_c is not None:
-        disp = float(np.linalg.norm(center - prev_c))
-        speed = disp * fps
-        acc = (speed - prev_s) * fps
-        vel_change = abs(speed - prev_s)
-    state["prev_center"] = center
-    state["prev_center_speed"] = speed
-    return {
-        "center_displacement": disp,
-        "center_speed": speed,
-        "center_acceleration": acc,
-        "center_velocity_change": vel_change,
-        "center_mean_speed": speed,
-        "center_mean_acceleration": acc,
-    }
+# ── 전처리 Step5 헬퍼 ──────────────────────────────────────────────────────────
+
+def _compute_dt(timestamps: np.ndarray) -> np.ndarray:
+    n  = len(timestamps)
+    dt = np.zeros_like(timestamps, dtype=float)
+    if n >= 3:
+        dt[1:-1] = (timestamps[2:] - timestamps[:-2]) / 2.0
+    if n >= 2:
+        dt[0]  = timestamps[1] - timestamps[0]
+        dt[-1] = timestamps[-1] - timestamps[-2]
+    return np.where(dt == 0, 1e-6, dt)
 
 
-# ── 핵심 추론 함수 (동기, 스레드 풀에서 실행) ─────────────────────────────────
+def _calc_angle(a_idx: int, b_idx: int, c_idx: int, df: pd.DataFrame) -> np.ndarray:
+    """arctan2 기반 관절 각도 계산 (arccos 대비 수치 안정적)"""
+    a  = df[[f'kp{a_idx}_x', f'kp{a_idx}_y', f'kp{a_idx}_z']].values
+    b  = df[[f'kp{b_idx}_x', f'kp{b_idx}_y', f'kp{b_idx}_z']].values
+    c  = df[[f'kp{c_idx}_x', f'kp{c_idx}_y', f'kp{c_idx}_z']].values
+    ba = a - b; bc = c - b
+    dot   = np.einsum('ij,ij->i', ba, bc)
+    cross = np.linalg.norm(np.cross(ba, bc), axis=1)
+    eps   = 1e-6
+    dot   = np.where(np.abs(dot)   < eps, eps, dot)
+    cross = np.where(np.abs(cross) < eps, eps, cross)
+    return np.degrees(np.arctan2(cross, dot))
 
-def infer_frame(jpeg_bytes: bytes, device_id: str, fps: float = 30.0) -> dict:
+
+def _central_diff(series: np.ndarray, dt: np.ndarray, to_radian: bool = False) -> np.ndarray:
+    """실제 timestamp 기반 중앙차분"""
+    x   = np.radians(series) if to_radian else series.astype(float)
+    out = np.zeros_like(x)
+    if len(x) > 2:
+        out[1:-1] = (x[2:] - x[:-2]) / (2 * dt[1:-1])
+    out = np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0)
+    return np.degrees(out) if to_radian else out
+
+
+# ── 전처리 Step5 ───────────────────────────────────────────────────────────────
+
+def _step5_make_features(df: pd.DataFrame) -> pd.DataFrame:
+    """각도/각속도/각가속도(15관절) + center_distance/center_speed → 47피처"""
+    df = df.copy()
+    dt = _compute_dt(df['timestamp'].values)
+
+    for name, a, b, c in _JOINT_TRIPLETS:
+        angle = _calc_angle(a, b, c, df)
+        omega = _central_diff(angle, dt, to_radian=True)
+        alpha = _central_diff(omega,  dt, to_radian=False)
+        df[f'{name}_angle']                = angle
+        df[f'{name}_angular_velocity']     = omega
+        df[f'{name}_angular_acceleration'] = alpha
+
+    coords = (
+        df[['kp23_x', 'kp23_y', 'kp23_z']].values
+        + df[['kp24_x', 'kp24_y', 'kp24_z']].values
+    ) / 2
+    diff = np.diff(coords, axis=0, prepend=coords[:1])
+    df['center_distance'] = np.linalg.norm(diff, axis=1)
+
+    ts        = df['timestamp'].values
+    dt_simple = np.diff(ts, prepend=ts[0])
+    dt_simple = np.where(dt_simple == 0, 1e-6, dt_simple)
+    df['center_speed'] = df['center_distance'] / dt_simple
+    return df
+
+
+# ── 전처리 Step6 ───────────────────────────────────────────────────────────────
+
+def _step6_scale(df: pd.DataFrame) -> np.ndarray:
+    """47개 고정 FEATURE_COLUMNS 순서로 StandardScaler.transform"""
+    X = df[FEATURE_COLUMNS].copy()
+    X = X.replace([np.inf, -np.inf], 0.0).fillna(0.0)
+    return _scaler.transform(X.values)
+
+
+# ── 핵심 추론 함수 (동기, 스레드 풀에서 실행) ──────────────────────────────────
+
+def infer_landmarks(landmarks: list, device_id: str, timestamp: float) -> dict:
     """
-    JPEG bytes → {"score": float 0-1, "fall": bool}
-    모델 미로드 시 {"score": 0.0, "fall": False} 반환.
+    landmark JSON → 30프레임 윈도우 → XGBoost → {"score": float, "fall": bool, "features": dict}
+    윈도우 미달 / STRIDE 미달 시 → {"score": 0.0, "fall": False, "features": {}}
     """
-    if _pose is None:
-        _load_models()
+    if len(landmarks) != 33:
+        return {"score": 0.0, "fall": False, "features": {}}
 
-    arr = np.frombuffer(jpeg_bytes, np.uint8)
-    frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-    if frame is None:
-        return {"score": 0.0, "fall": False}
+    # ── landmark JSON → row dict (main.py build_row() 대응) ───────────────
+    raw: dict = {}
+    for i, lm in enumerate(landmarks):
+        raw[f"kp{i}_x"]          = lm["x"]
+        raw[f"kp{i}_y"]          = lm["y"]
+        raw[f"kp{i}_z"]          = lm["z"]
+        raw[f"kp{i}_visibility"]  = lm["v"]
+    raw["timestamp"] = timestamp  # Android 기기 시간 사용
 
-    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    res = _pose.process(rgb)
-    if not res.pose_landmarks:
-        return {"score": 0.0, "fall": False}
+    # ── 윈도우 버퍼 관리 (Method A — deque 단일 책임) ─────────────────────
+    buf = _get_buffer(device_id)
+    buf.append(raw)
+    _frame_counts[device_id] = _frame_counts.get(device_id, 0) + 1
 
-    state = _get_state(device_id)
-    raw = {f"kp{i}_{ax}": getattr(lm, ax)
-           for i, lm in enumerate(res.pose_landmarks.landmark)
-           for ax in ("x", "y", "z")}
+    if len(buf) < WINDOW_SIZE:
+        return {"score": 0.0, "fall": False, "features": {}}
+    if _frame_counts[device_id] % STRIDE != 0:
+        return {"score": 0.0, "fall": False, "features": {}}
 
-    smoothed = _savgol_smooth(raw, state["kp_buf"])
-    df = _scale_normalize(_centralize(pd.DataFrame([smoothed])))
-    row = df.iloc[0].to_dict()
-
-    feats = _calculate_angles(row, state, fps)
-    feats.update(_center_dynamics(row, state, fps))
-
-    if _model is None or _scaler is None:
-        return {"score": 0.0, "fall": False}
-
+    # ── 전처리 Step2~6 + XGBoost 추론 ─────────────────────────────────────
     try:
-        feat_cols = [c for c in feats if any(x in c for x in ("angle", "center"))]
-        X = pd.DataFrame([feats])[feat_cols].reindex(
-            columns=_scaler.feature_names_in_, fill_value=0.0
-        )
-        X_scaled = _scaler.transform(X)
-        score = float(_model.predict_proba(X_scaled)[0][1] * 100)
-        fall = bool(_model.predict(X_scaled)[0] == 1)
+        df_win = pd.DataFrame(buf)
+        df_win = _step2_resolve_nan(df_win)
+        df_win = _step3_smoothing_savgol(df_win)
+        df_win = _step4_pose_normalize(df_win)
+        df_win = _step5_make_features(df_win)
+        X      = _step6_scale(df_win)
+
+        proba = _model.predict_proba(X)          # shape (30, 2)
+        score = float(proba[:, 1].mean() * 100)  # 30프레임 평균
+        fall  = bool(score >= CRITICAL_THRESHOLD)
+        feats = df_win[FEATURE_COLUMNS].iloc[-1].to_dict()
         return {"score": score, "fall": fall, "features": feats}
     except Exception as e:
         print(f"[ai.engine] 추론 오류: {e}")
         return {"score": 0.0, "fall": False, "features": {}}
 
 
-async def infer_frame_async(jpeg_bytes: bytes, device_id: str, fps: float = 30.0) -> dict:
+async def infer_landmarks_async(landmarks: list, device_id: str, timestamp: float) -> dict:
     loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, infer_frame, jpeg_bytes, device_id, fps)
+    return await loop.run_in_executor(None, infer_landmarks, landmarks, device_id, timestamp)

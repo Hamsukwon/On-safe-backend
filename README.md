@@ -7,19 +7,19 @@ AI 기반 노인 낙상 감지 솔루션의 백엔드 서버
 ## 아키텍처 개요
 
 ```
-Android App
-    │ JWT
-    ▼
-Kotlin Spring 서버 (:8080)   ←── Python AI 서버 (:8000)
-    │ Firestore / Redis            │ MediaPipe 추론
-    ▼                             │ /internal/realtime
-Firebase (Auth·Firestore·Storage) │ /internal/fall-log
-    ▲                             │ /internal/frame/{userId}
-    └──────────────────────────────┘
+Android App (사용자 모드)          Android App (보호자 모드)
+    │ landmark JSON                     │ JWT
+    │ WS /ws/stream                     ▼
+    ▼                          Kotlin Spring 서버 (:8080)
+Python AI 서버 (:8000)  ──────▶    │ Firestore / Redis / FCM
+    │ XGBoost 추론                  │ WS /ws/camera/{userId}
+    │ /internal/realtime             ▼
+    │ /internal/fall-log        Firebase (Firestore·Storage·FCM)
+    └──────────────────────────▶
 ```
 
-- **Python AI 서버 (FastAPI)**: 카메라 프레임 수신 → MediaPipe 골격 추출 → Decision Tree 위험도 추론 → Kotlin internal API 호출
-- **Kotlin Spring 서버 (WebFlux)**: 앱 API 제공, Firestore 저장, FCM 알림, Redis pub/sub 기반 실시간 스트리밍
+- **Python AI 서버 (FastAPI)**: Android on-device MediaPipe → landmark JSON 수신 → 30프레임 슬라이딩 윈도우 → XGBoost 위험도 추론 → Kotlin internal API 호출
+- **Kotlin Spring 서버 (WebFlux)**: 앱 API 제공, Firestore 저장, FCM 알림, Redis pub/sub 기반 보호자 실시간 스트리밍
 
 ---
 
@@ -28,7 +28,7 @@ Firebase (Auth·Firestore·Storage) │ /internal/fall-log
 | 구분 | 기술 |
 |---|---|
 | Kotlin 서버 | Spring Boot 3.4, WebFlux, Kotlin Coroutines |
-| Python 서버 | FastAPI, MediaPipe, scikit-learn |
+| Python 서버 | FastAPI, XGBoost, scikit-learn |
 | 데이터베이스 | Firebase Firestore |
 | 캐시·메시징 | Redis (세션 상태, 블랙리스트, pub/sub) |
 | 이메일 | AWS SES SDK (SesAsyncClient) |
@@ -116,5 +116,7 @@ docker-compose up --build
 | [`docs/ses-email-verification.md`](docs/ses-email-verification.md) | AWS SES 이메일 인증번호 발송 구현 상세 |
 | [`docs/camera-streaming-implementation.md`](docs/camera-streaming-implementation.md) | 실시간 스트리밍 구현 상세 |
 | [`docs/unimplemented-items.md`](docs/unimplemented-items.md) | 미구현 항목 (#1 나이/관계, MP4 영상) |
+| [`docs/ai-engine-migration-plan.md`](docs/ai-engine-migration-plan.md) | AI 추론 엔진 마이그레이션 계획 (완료) |
+| [`docs/ai-runtime-analysis.md`](docs/ai-runtime-analysis.md) | 런타임 병목·리소스·동시성 분석 |
 | [`CHANGELOG.md`](CHANGELOG.md) | 브랜치별 변경 이력 |
-| [`v3.0_onsafe_api_spec.md`](v3.0_onsafe_api_spec.md) | v3.0 API 명세서 |
+| [`v4.0_onsafe_api_spec.md`](v4.0_onsafe_api_spec.md) | v4.0 API 명세서 (최신) |

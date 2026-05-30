@@ -1,5 +1,50 @@
 # Changelog
 
+## [Unreleased] - feature/ai-engine-migration
+
+### 2026-05-29 — AI 추론 엔진 마이그레이션 (Step 1~6 완료)
+
+**변경 파일:** `app/ai/engine.py`, `app/ai/buffer.py`, `app/domain/camera/router.py`, `app/domain/camera/service.py`, `app/domain/camera/schemas.py`, `app/main.py`, `Dockerfile.python`, `requirements.txt`, `docker-compose.yml`
+
+#### Changed
+
+- **`app/ai/engine.py`**: Decision Tree → **XGBoost** 모델 교체. `infer_frame(jpeg_bytes)` → `infer_landmarks(landmarks, device_id, timestamp)` — cv2·MediaPipe 전면 제거, Android on-device landmark JSON 직접 수신. 30프레임 슬라이딩 윈도우 + STRIDE=5 추론 주기 유지. 임계값 WARNING=51, CRITICAL=76 통일. eager load로 전환 (lazy 조건 제거)
+
+- **`app/ai/buffer.py`**: `push_frame_count()`, `should_infer()` 제거 (Step 3). `save_latest_frame` 호출 제거 — 보호자 릴레이 보류로 미사용 상태
+
+- **`app/domain/camera/router.py`**: `POST /api/camera/stream` (HTTP multipart) 제거 → `WS /ws/stream?token=` (WebSocket) 추가. JWT 인증을 쿼리파라미터 방식으로 전환. init/frame 메시지 분기 처리
+
+- **`app/domain/camera/service.py`**: `process_stream()` 제거 → `process_frame(landmarks, timestamp, user_id, device_id)` 신규 추가. `_save_fall_log()` jpeg_bytes 파라미터 선택적으로 변경 (현재 None 전달)
+
+- **`app/domain/camera/schemas.py`**: `StreamResponse`에 `level: Optional[str]` 추가, 레거시 `status` 필드 제거
+
+- **`app/main.py`**: startup에서 `_load_models()` eager load 추가. `GET /health` 엔드포인트 추가 (`model_loaded`, `scaler_loaded` 상태 반환)
+
+- **`Dockerfile.python`**: apt-get 시스템 라이브러리 레이어 제거 (libgl1, libglib2.0-0). opencv-python-headless 교체 스크립트 제거. pip install 단순화
+
+- **`requirements.txt`**: `mediapipe`, `opencv-python`, `python-multipart` 제거. `xgboost>=2.0.0` 추가
+
+- **`docker-compose.yml`**: python-ai 서비스 healthcheck 추가 (GET /health, 15초 주기, start_period 20초). 주석 MediaPipe → XGBoost 수정
+
+#### Added
+
+- **`pkl/xgb_model.pkl`**: XGBoost 낙상 감지 모델 (Decision Tree에서 교체)
+- **`docs/ai-engine-migration-plan.md`**: Step 1~6 마이그레이션 계획 및 완료 현황
+- **`docs/ai-buffer-refactor-analysis.md`**: buffer.py Step 3 설계 근거 문서
+- **`docs/ai-ondevice-plan.md`**: Option C On-device 추론 설계 계획
+- **`docs/ai-migration-test-report.md`**: 마이그레이션 테스트 보고서
+- **`docs/ai-runtime-analysis.md`**: 런타임 병목·리소스·동시성·트랜잭션 분석
+- **`v4.0_onsafe_api_spec.md`**: WebSocket+landmark 아키텍처 기준 최신 API 명세서
+- **`scripts/test_engine.py`**: engine.py 단위 테스트 (서버 불필요)
+- **`scripts/test_ws_stream.py`**: WebSocket 통합 테스트
+
+#### Removed
+
+- **`pkl/decision_tree_model.pkl`**: XGBoost로 교체
+- **`v2.0_onsafe_api_spec.md`**: git rm (v3.0, v4.0으로 대체)
+
+---
+
 ## [Unreleased] - feature/ses-email-migration
 
 ---

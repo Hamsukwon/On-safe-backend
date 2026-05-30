@@ -2,7 +2,7 @@
 > **기준 레포**: `OnSafe/ai-server/main.py`  
 > **대상 파일**: `On-safe-backend/app/ai/engine.py` 및 관련 파일  
 > **작성일**: 2026-05-28  
-> **상태**: 미착수
+> **상태**: Step 1~4 완료 / Step 5 진행 중 (router.py·main.py 완료 / engine.py·service.py·buffer.py 미완) / Step 6 미착수
 
 ---
 
@@ -19,7 +19,7 @@
 | 피처 수 | 동적 선택, center 6개 | 고정 47개, center 2개 |
 | 피처 순서 | ankle → torso → spine | torso → spine → ankle |
 | 위험 점수 | 단일 프레임 predict_proba | 30프레임 평균 → 안정적 |
-| 임계값 | 정상 ≤50 / 주의 51~75 / 위험 ≥76 | 정상 <40 / WARNING 40~69 / CRITICAL ≥70 |
+| 임계값 | 정상 ≤50 / 주의 51~75 / 위험 ≥76 | 정상 <40 / WARNING 40~69 / CRITICAL ≥70 (**최종 결정: 기존 51/76 유지 — 아래 Step 4 참고**) |
 
 ---
 
@@ -40,155 +40,228 @@ On-safe-backend/pkl/decision_tree_model.pkl  →  삭제
 
 ---
 
-### Step 2 — `app/ai/engine.py` 전면 재작성
+### Step 2 — `app/ai/engine.py` 전면 재작성 ✅ 완료
 
-기존 파일을 삭제하고 `main.py` 로직 기반으로 재작성한다.  
-FastAPI 라우터 분리 구조(`app/` 패키지)는 유지한다.
+> **제약 조건 반영**: router.py(HTTP+JPEG) 외부 인터페이스 유지 →
+> `cv2`, `mediapipe` 제거 불가, JPEG 입력 방식 유지
 
-#### 2-1. 제거 대상
+#### 2-1. 제거 완료
 
-- `import cv2` / `import mediapipe as mp` 및 관련 코드 전체
-- `infer_frame(jpeg_bytes, device_id, fps)` 함수
-- `_savgol_smooth()` — 단일 프레임 SGV (윈도우 단위로 대체)
-- `_centralize()`, `_scale_normalize()` — step4로 통합
-- `_compute_angle()` (arccos 방식)
-- `_center_dynamics()` — center 피처 6개 계산 (2개로 축소)
-- `_device_state` dict — 프레임별 상태 관리 (윈도우 버퍼로 대체)
+- `fps` 파라미터 — timestamp 기반 중앙차분으로 대체
+- `_savgol_smooth()` — 단일 프레임 SGV → window=7 윈도우 전체 SGV로 대체
+- `_centralize()`, `_scale_normalize()` — `_step4_pose_normalize()`로 통합
+- `_compute_angle()` (arccos) — `_calc_angle()` (arctan2)로 교체
+- `_center_dynamics()` — center 6개 → `center_distance`, `center_speed` 2개로 축소
+- `_device_state` dict — `_frame_buffers` deque로 대체
 
-#### 2-2. 추가/교체 대상
+#### 2-2. 유지 (HTTP+JPEG 제약)
 
-`main.py`에서 그대로 이식한다.
+- `import cv2`, `import mediapipe as mp` — JPEG 입력이므로 서버 측 MediaPipe 유지
+- `infer_frame(jpeg_bytes, device_id)` — 시그니처 유지 (fps 파라미터만 제거)
+
+#### 2-3. 추가 완료
 
 | 함수 | 역할 |
 |---|---|
-| `build_row(msg)` | JSON landmark → wide-row dict 변환 |
-| `step2_resolve_nan(df)` | visibility < 0.3 NaN 처리 + 3σ 이상치 + 보간 |
-| `step3_smoothing_savgol(df)` | 윈도우 전체 SGV (window=7, poly=2) |
-| `step4_pose_normalize(df)` | 골반 중앙정렬 + 거리정규화 (윈도우 전체) |
-| `step5_make_features(df)` | arctan2 각도 + timestamp 중앙차분 속도/가속도 |
-| `step6_scale(df)` | 47개 고정 FEATURE_COLUMNS로 스케일링 |
-| `calc_risk_score(proba)` | 30프레임 평균 predict_proba |
-| `classify_level(score)` | NORMAL / WARNING / CRITICAL 분기 |
+| `_step2_resolve_nan(df)` | visibility < 0.3 NaN 처리 + 3σ 이상치 + 보간 |
+| `_step3_smoothing_savgol(df)` | 윈도우 전체 SGV (window=7, poly=2) |
+| `_step4_pose_normalize(df)` | 골반 중앙정렬 + 거리정규화 (윈도우 전체) |
+| `_step5_make_features(df)` | arctan2 각도 + timestamp 중앙차분 속도/가속도 |
+| `_step6_scale(df)` | 47개 고정 FEATURE_COLUMNS로 스케일링 |
+| `_frame_buffers` / `_frame_counts` | device_id별 deque 윈도우 버퍼 (Method A) |
 
-#### 2-3. 고정 상수 (main.py와 동일하게 유지)
+#### 2-4. 고정 상수
 
 ```python
-WINDOW_SIZE = 30    # 추론 윈도우 프레임 수
-STRIDE = 5          # 추론 호출 간격
-COOLDOWN_SEC = 10.0 # 중복 알림 방지
+WINDOW_SIZE        = 30    # 슬라이딩 윈도우 프레임 수
+STRIDE             = 5     # 추론 호출 간격
+WARNING_THRESHOLD  = 51.0  # 시스템 기준 51/76으로 통일 (최초 계획 40/70에서 변경)
+CRITICAL_THRESHOLD = 76.0  # Kotlin InternalService·RiskLevel.kt와 일치
 
-WARNING_THRESHOLD = 40.0
-CRITICAL_THRESHOLD = 70.0
-
-JOINTS_ORDER = [
+_JOINTS_ORDER = [
     'neck', 'shoulder_balance',
     'shoulder_left', 'shoulder_right',
     'elbow_left', 'elbow_right',
     'hip_left', 'hip_right',
     'knee_left', 'knee_right',
-    'torso_left', 'torso_right', 'spine',  # ← ankle보다 앞에
+    'torso_left', 'torso_right', 'spine',  # ← ankle보다 앞
     'ankle_left', 'ankle_right',
 ]
-# FEATURE_COLUMNS 총 47개 (assert로 검증)
+# FEATURE_COLUMNS 총 47개 (서버 시작 시 assert 검증)
 ```
 
-#### 2-4. 새 공개 인터페이스
+#### 2-5. 현재 공개 인터페이스
 
 ```python
-# 기존
+# 기존 (fps 파라미터 있었음)
 infer_frame(jpeg_bytes: bytes, device_id: str, fps: float) -> dict
 
-# 변경 후
-infer_window(rows: list[dict]) -> dict
-# rows: build_row()로 만든 30개 프레임 dict 리스트
-# return: {"score": float, "level": str, "fall": bool}
+# 완료 (fps 제거, 시그니처 유지)
+infer_frame(jpeg_bytes: bytes, device_id: str) -> dict
+# 윈도우 미달/STRIDE 미달: {"score": 0.0, "fall": False, "features": {}}
+# 추론 완료:              {"score": float, "fall": bool, "features": dict}
+
+async def infer_frame_async(jpeg_bytes: bytes, device_id: str) -> dict
 ```
 
 ---
 
-### Step 3 — `app/ai/buffer.py` 수정
+### Step 3 — `app/ai/buffer.py` 수정 ✅ 완료
 
-윈도우 버퍼를 Redis가 아닌 메모리(deque)로 관리한다.  
-기존 `push_frame_count` / `should_infer` 방식은 단일 프레임 기준이라 불필요해진다.
+프레임 카운터/추론 판단을 engine.py deque로 이전 (Method A).
+Redis는 공유 상태 저장 목적으로만 유지.
 
-**변경 내용**
-- `push_frame_count()`, `should_infer()` 제거 또는 비활성화
-- device_id별 `deque(maxlen=30)` 버퍼를 engine 내부에서 관리 (main.py의 `frame_buffer` 참조)
-- STRIDE 카운터(`frame_count % STRIDE`)도 engine 내부로 이동
+**제거 완료**
+- `push_frame_count()` — engine.py `_frame_counts` dict로 대체
+- `should_infer()` — engine.py `len(buf) < WINDOW_SIZE` 체크로 대체
+- Redis 키 `frame_count:{device_id}` 미사용
 
 **유지 항목**
-- `save_score()`, `get_score()` — Redis score 캐시는 유지
-- `save_latest_frame()`, `get_latest_frame()` — 프레임 릴레이용 유지
-- `check_caution_cooldown()` — WARNING 쿨다운 유지
+- `save_score()`, `get_score()` — score:{user_id} TTL 30s
+- `save_latest_frame()`, `get_latest_frame()` — frame:{device_id} TTL 5s
+- `check_caution_cooldown()` — caution_cd:{user_id} TTL 300s
+
+**service.py 연동 변경 (Step 3 스코프)**
+- import에서 `push_frame_count`, `should_infer` 제거
+- `process_stream()` 내 두 호출 제거
+- 윈도우 미달 판단: `should_infer()` → `result["features"]` 빈 딕셔너리 체크로 전환
 
 ---
 
-### Step 4 — `app/domain/camera/service.py` 수정
+### Step 4 — `app/domain/camera/service.py` 수정 ✅ 완료
 
-#### 4-1. `process_stream()` 함수 시그니처 변경
+> **최종 결정**: 임계값·레벨 문자열은 기존(51/76, 한국어) 유지. Kotlin 결합도 이유로 변경 범위 축소.
+
+#### 4-1. `process_stream()` 시그니처 — 유지 (Step 5에서 변경 예정)
 
 ```python
-# 기존: JPEG bytes 수신
+# Step 5 전까지 HTTP+JPEG 인터페이스 유지
 async def process_stream(jpeg_bytes: bytes, user_id: str, device_id: str) -> StreamResponse
-
-# 변경 후: landmark row 수신
-async def process_stream(row: dict, user_id: str, device_id: str) -> StreamResponse
-# row: build_row(msg)로 만든 single-frame dict
 ```
 
-#### 4-2. 내부 로직 변경
+#### 4-2. 실제 변경 완료 내용
 
-- `infer_frame_async(jpeg_bytes, device_id)` → `infer_window_async(device_id)` 호출
-  - 윈도우가 30프레임 미만이거나 STRIDE 미달이면 조기 반환
-- `_publish_frame(user_id, jpeg_bytes)` 제거 — JPEG 릴레이 불필요
-- `_score_level()` 임계값 변경: 51/76 → 40/70
-
-#### 4-3. 임계값 변경
+`_save_realtime_data()` allowed 피처 목록 — center 6개 → 2개:
 
 ```python
-# 기존
-def _score_level(score: float) -> str:
-    if score >= 76:   return "위험"
-    if score >= 51:   return "주의"
-    return "정상"
+# 변경 전 — engine.py Step2 이후 존재하지 않는 피처 포함
+'center_speed', 'center_acceleration', 'center_displacement',
+'center_velocity_change', 'center_mean_speed', 'center_mean_acceleration'
 
-# 변경 후 (main.py 기준)
-def _score_level(score: float) -> str:
-    if score >= 70:   return "CRITICAL"
-    if score >= 40:   return "WARNING"
-    return "NORMAL"
+# 변경 후 — engine.py FEATURE_COLUMNS와 일치
+'center_distance', 'center_speed'
 ```
+
+#### 4-3. 변경하지 않은 항목 및 이유
+
+| 항목 | 결정 | 이유 |
+|---|---|---|
+| `_score_level()` 임계값 | 76/51 유지 | Kotlin RiskLevel.kt·InternalService.kt와 결합 — 동시 수정 필요하나 범위 확대 않기로 결정 |
+| 레벨 문자열 | "위험"/"주의"/"정상" 유지 | 임계값 유지에 따라 fromLabel() 수정 불필요 |
+| 분기 로직 | 숫자 비교 유지 | 위와 동일 |
 
 ---
 
-### Step 5 — `app/domain/camera/router.py` 수정
+### Step 5 — WebSocket 프로토콜 전환 🔄 진행 중
 
-WebSocket 프로토콜을 main.py와 동일하게 맞춘다.
+> **영향 파일**: router.py / main.py (완료) + engine.py / service.py / buffer.py (미완)  
+> **인증**: `?token=` 쿼리파라미터 (Kotlin WS 패턴과 일치)  
+> **경로**: `/ws/stream` (Python :8000, 사용자 모드 전용)
 
-#### 기존 프로토콜 (JPEG)
+#### 프로토콜 변경
+
 ```
-Android → [binary JPEG bytes] → 서버
+# 기존 (HTTP+JPEG)
+POST /api/camera/stream  multipart(frame: JPEG, user_id, device_id)
+
+# 변경 후 (WebSocket+landmark)
+WS /ws/stream?token={jwt}
+  Android → {"type": "init",  "user_id": "...", "device_id": "..."}
+  Android → {"type": "frame", "frame": N, "timestamp": T,
+              "landmarks": [{"x":..,"y":..,"z":..,"v":..}, ...]}  # 33개
+  서버     → {"type": "result", "fall_score": N, "fall": bool, "level": "..."}
 ```
 
-#### 변경 후 프로토콜 (JSON landmark)
+#### 5-1. `router.py` + `main.py` ✅ 완료
+
+- `POST /api/camera/stream` 제거
+- `WS /ws/stream` 추가 (`ws_router` 분리, `main.py`에 등록)
+- JWT 검증: `decode_token(token)` → 실패 시 `close(code=1008)`
+- init / frame 메시지 분기 처리, `service.process_frame()` 호출
+
+#### 5-2. `app/ai/engine.py` — 미완료
+
+JPEG 입력 제거, landmark JSON 직접 수신으로 전환.
+
+```python
+# 변경 전
+def infer_frame(jpeg_bytes: bytes, device_id: str) -> dict:
+    arr   = np.frombuffer(jpeg_bytes, np.uint8)   # JPEG 디코딩
+    frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)   # cv2 변환
+    res   = _pose.process(rgb)                    # MediaPipe 실행
+    raw   = {f"kp{i}_{ax}": getattr(lm, ax) ...} # landmark 추출
+    raw["timestamp"] = time.time()                # 서버 시간
+
+# 변경 후
+def infer_landmarks(landmarks: list, device_id: str, timestamp: float) -> dict:
+    raw = {
+        f"kp{i}_x": lm["x"], f"kp{i}_y": lm["y"],
+        f"kp{i}_z": lm["z"], f"kp{i}_visibility": lm["v"]
+        for i, lm in enumerate(landmarks)
+    }
+    raw["timestamp"] = timestamp  # Android 기기 시간 사용
+    # Step2~6 로직 동일
 ```
-Android → {"type": "init", "device_id": "..."}          # 연결 초기화
-Android → {"type": "frame", "frame": N, "timestamp": T, # 매 프레임
-            "landmarks": [{"x":..,"y":..,"z":..,"v":..}, ...]}  # 33개
-서버     → {"type": "result", "fall_score": N, "level": "..."}  # 추론 결과
+
+제거 대상: `import cv2`, `import mediapipe as mp`, `_pose` 싱글턴, `_load_models()`의 MediaPipe 초기화  
+추가: `infer_landmarks()`, `infer_landmarks_async()`
+
+#### 5-3. `app/domain/camera/service.py` — 미완료
+
+`process_stream()` → `process_frame()` 추가 (기존 함수는 Step 6까지 유지).
+
+```python
+# 추가할 함수
+async def process_frame(landmarks: list, timestamp: float, user_id: str, device_id: str) -> StreamResponse:
+    result = await infer_landmarks_async(landmarks, device_id, timestamp)
+    if not result["features"]:
+        return StreamResponse(score=0.0, fall=False)
+    score: float = result["score"]
+    fall: bool   = result["fall"]
+    level = _score_level(score)
+
+    await save_score(user_id, score, level)
+    await _save_realtime_data(user_id, result["features"], score)
+    await _update_realtime(user_id, score, level)
+
+    log_id: str | None = None
+    if score >= 76 or fall:
+        log_id = await _save_fall_log(user_id, device_id, score, fall, None)
+    elif score >= 51:
+        if await check_caution_cooldown(user_id):
+            log_id = await _save_fall_log(user_id, device_id, score, fall, None)
+
+    return StreamResponse(score=score, fall=fall, log_id=log_id)
 ```
+
+> **보호자 릴레이 보류**: `_publish_frame()` 호출 여부는 릴레이 방식 결정 후 반영
+
+#### 5-4. `app/ai/buffer.py` — 미완료
+
+`save_latest_frame(jpeg_bytes)` 호출처가 `process_stream()` → `process_frame()` 교체로 자연 제거됨.  
+함수 자체(save/get_latest_frame)는 보호자 릴레이 결정 전까지 유지, Step 6에서 최종 정리.
 
 ---
 
-### Step 6 — requirements.txt / Dockerfile 수정
+### Step 6 — requirements.txt / Dockerfile / 코드 정리
 
-#### 제거
+#### requirements.txt — 제거
 ```
 opencv-python (또는 opencv-python-headless)
 mediapipe
 ```
 
-#### 유지
+#### requirements.txt — 유지
 ```
 fastapi
 uvicorn
@@ -200,6 +273,12 @@ scipy
 httpx
 redis
 ```
+
+#### 코드 정리 (Step 5 완료 후)
+
+- `service.py`: `process_stream(jpeg_bytes, ...)` 제거 (WebSocket 전환 완료 후 불필요)
+- `buffer.py`: `save_latest_frame()` / `get_latest_frame()` — 보호자 릴레이 결정에 따라 제거 또는 대체
+- `engine.py`: `infer_frame()` / `infer_frame_async()` 제거 (infer_landmarks로 대체 완료 후)
 
 ---
 
@@ -223,6 +302,23 @@ redis
 | 데이터 outbound | $0.09/GB |
 | Firebase Storage 저장 | $0.026/GB/월 |
 | Firebase Storage 다운로드 | $0.12/GB |
+
+---
+
+### 아키텍처 옵션 정의
+
+비용 분석에서 사용하는 Option A / B는 **보호자 릴레이 방식**에 따른 구분이다.  
+AI 추론 로직(engine.py Step 1~6)은 두 옵션 모두 동일하게 적용된다.
+
+| 옵션 | AI 추론 입력 | 보호자 릴레이 | 특징 |
+|---|---|---|---|
+| **현재** | Android → JPEG 30fps → 서버 MediaPipe | JPEG 30fps 그대로 릴레이 | 비용 최대 |
+| **Option A** | Android → landmark 30fps (AI) + JPEG 5fps (릴레이) | JPEG 5fps 릴레이 | 이중 스트림 |
+| **Option B** | Android → landmark 30fps (AI만) | JPEG 별도 저주파 (2~3fps) | 단일 스트림 + 저주파 릴레이 |
+| **Option C** | Android 자체 추론 (ONNX) | 별도 선택 | `ai-ondevice-plan.md` 참고 |
+
+> **현재 진행 중인 engine.py 마이그레이션(Step 1~6)은 Option A/B 공통 작업이다.**  
+> 보호자 릴레이 방식(A vs B)은 Step 5(router.py) 작업 시 결정한다.
 
 ---
 
