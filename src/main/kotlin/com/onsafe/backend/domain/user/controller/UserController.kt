@@ -7,6 +7,7 @@ import com.onsafe.backend.domain.auth.model.dto.FcmTokenUpdateRequest
 import com.onsafe.backend.domain.auth.service.AuthService
 import com.onsafe.backend.domain.user.model.dto.UserResponse
 import com.onsafe.backend.domain.user.model.dto.UserUpdateRequest
+import com.onsafe.backend.domain.user.model.dto.VerifyPasswordRequest
 import com.onsafe.backend.domain.user.service.UserService
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
@@ -42,6 +43,18 @@ class UserController(
     ): ApiResponse<UserResponse> {
         if (principal != userId) throw BusinessException(ErrorCode.FORBIDDEN)
         return ApiResponse.ok(userService.updateUser(userId, request), "개인정보가 수정되었습니다.")
+    }
+
+    @Operation(summary = "비밀번호 사전 확인", security = [SecurityRequirement(name = "BearerAuth")])
+    @PostMapping("/{userId}/verify-password")
+    suspend fun verifyPassword(
+        @PathVariable userId: String,
+        @AuthenticationPrincipal principal: String,
+        @RequestBody request: VerifyPasswordRequest
+    ): ApiResponse<Unit> {
+        if (principal != userId) throw BusinessException(ErrorCode.FORBIDDEN)
+        userService.verifyPassword(userId, request.currentPassword)
+        return ApiResponse.ok(message = "비밀번호가 확인되었습니다.")
     }
 
     @Operation(summary = "FCM 토큰 등록/갱신", security = [SecurityRequirement(name = "BearerAuth")])
