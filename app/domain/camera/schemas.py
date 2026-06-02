@@ -3,9 +3,9 @@ from typing import Optional
 
 
 class StreamResponse(BaseModel):
-    status: str = "ok"
     score: float
     fall: bool
+    level: Optional[str] = None
     log_id: Optional[str] = None
 
 

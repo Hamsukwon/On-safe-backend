@@ -1,23 +1,57 @@
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
+from jose import JWTError
 from app.core.deps import get_current_user_id
+from app.core.security import decode_token
 from app.domain.camera import service
 from app.domain.camera.schemas import (
-    StreamResponse, ScoreResponse, StatusResponse,
+    ScoreResponse, StatusResponse,
     CameraUrlResponse,
 )
 
 router = APIRouter(prefix="/api/camera", tags=["Camera"])
+ws_router = APIRouter(tags=["Camera WebSocket"])
 
 
-@router.post("/stream")
-async def stream(
-    frame: UploadFile = File(..., description="JPEG 카메라 프레임"),
-    user_id: str = Form(...),
-    device_id: str = Form(...),
-    _: str = Depends(get_current_user_id),
-) -> StreamResponse:
-    jpeg_bytes = await frame.read()
-    return await service.process_stream(jpeg_bytes, user_id, device_id)
+@ws_router.websocket("/ws/stream")
+async def ws_stream(websocket: WebSocket, token: str = Query(...)):
+    try:
+        payload = decode_token(token)
+        _ = payload["sub"]
+    except (JWTError, KeyError):
+        await websocket.close(code=1008)
+        return
+
+    await websocket.accept()
+
+    user_id: str | None = None
+    device_id: str | None = None
+
+    try:
+        while True:
+            data = await websocket.receive_json()
+            msg_type = data.get("type")
+
+            if msg_type == "init":
+                user_id = data.get("user_id")
+                device_id = data.get("device_id")
+                await websocket.send_json({"type": "init_ok"})
+
+            elif msg_type == "frame":
+                if not user_id or not device_id:
+                    await websocket.send_json({"type": "error", "message": "init 먼저 전송 필요"})
+                    continue
+                landmarks = data.get("landmarks", [])
+                timestamp = data.get("timestamp", 0.0)
+                result = await service.process_frame(landmarks, timestamp, user_id, device_id)
+                await websocket.send_json({
+                    "type": "result",
+                    "fall_score": result.score,
+                    "fall": result.fall,
+                    "level": result.level,
+                })
+
+    except WebSocketDisconnect:
+        pass
 
 
 @router.get("/score/{user_id}")

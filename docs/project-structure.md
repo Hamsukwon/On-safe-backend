@@ -1,7 +1,7 @@
 
 # On-safe-backend 프로젝트 구조
 
-> 최종 수정일: 2026-05-27 (feature/ses-email-migration)
+> 최종 수정일: 2026-05-29 (feature/ai-engine-migration)
 
 ---
 
@@ -20,27 +20,34 @@
 ```
 app/
 ├── main.py                       ✅ 앱 진입점 — 라우터 등록, CORS, Firebase 초기화
+│                                    startup: _load_models() eager load, GET /health 엔드포인트
 ├── ai/
 │   ├── __init__.py               — 패키지 초기화
-│   ├── buffer.py                 ✅ Redis 관리 — 프레임 카운터, score 캐시, 최신 프레임,
-│   │                                주의(51~75) 이벤트 5분 쿨다운 (check_caution_cooldown)
-│   └── engine.py                 ✅ AI 추론 엔진 — MediaPipe → 피처 계산 → Decision Tree
+│   ├── buffer.py                 ✅ Redis 관리 — score 캐시, 주의(51~75) 이벤트 5분 쿨다운
+│   │                                save_latest_frame/get_latest_frame: 보호자 릴레이 보류 중
+│   └── engine.py                 ✅ AI 추론 엔진 — landmark JSON → 30프레임 윈도우 → XGBoost
+│                                    infer_landmarks(landmarks, device_id, timestamp)
+│                                    Step2(NaN보정) → Step3(SGV) → Step4(골반정규화)
+│                                    → Step5(47피처) → Step6(StandardScaler) → predict_proba
 ├── core/
 │   ├── config.py                 ✅ 환경변수 로드 — Firebase 경로, Redis URL, JWT 설정,
 │   │                                Kotlin internal base URL, firebase_storage_bucket
-│   ├── deps.py                   ✅ JWT 인증 의존성 — Bearer 토큰 파싱·검증
+│   ├── deps.py                   ✅ JWT 인증 의존성 — Bearer 토큰 파싱·검증 (HTTP 엔드포인트용)
 │   ├── exceptions.py             ✅ HTTP 예외 헬퍼 — not_found, conflict, unauthorized
 │   ├── firebase.py               ✅ Firebase 초기화 (storageBucket 옵션 조건부 주입),
 │   │                                Firestore 클라이언트, FCM 발송
-│   ├── security.py               ✅ JWT 검증 (decode_token만 사용)
+│   ├── security.py               ✅ JWT 검증 (decode_token — WebSocket ?token= 인증에도 사용)
 │   └── storage.py                ✅ Firebase Storage 업로드 추상화 — upload_thumbnail()
 │                                    GCS 경로 반환, AWS S3 마이그레이션 시 이 모듈만 교체
 └── domain/
     ├── camera/
-    │   ├── router.py             ✅ /api/camera/* 4개 엔드포인트 등록
-    │   ├── schemas.py            ✅ 응답 스키마 — StreamResponse, ScoreResponse 등
+    │   ├── router.py             ✅ HTTP: /api/camera/* 3개 (score·status·url)
+    │   │                            WS: /ws/stream?token= (landmark 수신·추론·결과 반환)
+    │   │                            ws_router 분리하여 main.py에 별도 등록
+    │   ├── schemas.py            ✅ StreamResponse(score, fall, level, log_id), ScoreResponse 등
     │   └── service.py            ✅ 핵심 비즈니스 로직
-    │                                - score≥76 or fall → _save_fall_log (썸네일 업로드 포함)
+    │                                - process_frame(): landmark → 추론 → realtime·fall-log 위임
+    │                                - score≥76 or fall → _save_fall_log (jpeg_bytes=None)
     │                                - score 51~75 → 5분 쿨다운 통과 시 _save_fall_log
     │                                - Kotlin internal API 호출 (realtime · fall-log 위임)
     └── devices/
@@ -49,17 +56,20 @@ app/
         └── service.py            ✅ 기기 목록 조회(get_devices), 기기 등록 (Firestore)
 
 pkl/
-├── decision_tree_model.pkl       ✅ 낙상 감지 학습된 Decision Tree 모델
-└── scaler.pkl                    ✅ StandardScaler — 피처 정규화에 사용
+├── xgb_model.pkl                 ✅ 낙상 감지 학습된 XGBoost 모델 (Decision Tree에서 교체)
+└── scaler.pkl                    ✅ StandardScaler — 47개 피처 정규화
 
 scripts/
 ├── setup_storage.py              ✅ GCS Lifecycle(30일 자동삭제) + CORS 설정 (gsutil 불필요)
 ├── test_storage_api.py           ✅ Firebase Storage API 통합 테스트
 │                                    (thumbnail · download · signed URL 흐름)
-└── test_caution_notification.py  ✅ 주의 알림 및 쿨다운 동작 통합 테스트
+├── test_caution_notification.py  ✅ 주의 알림 및 쿨다운 동작 통합 테스트 (Kotlin 서버 기준)
+├── test_engine.py                ✅ engine.py infer_landmarks() 단위 테스트 (서버 불필요)
+└── test_ws_stream.py             ✅ WebSocket /ws/stream 통합 테스트 (JWT 토큰 필요)
 
 Dockerfile.python                 ✅ Python AI 서버 Docker 이미지 빌드 설정
-requirements.txt                  ✅ Python 의존성 목록
+                                     apt-get 레이어 제거 (opencv/mediapipe 불필요), pip install 단순화
+requirements.txt                  ✅ Python 의존성 목록 (xgboost 추가, mediapipe·opencv 제거)
 ```
 
 ---
@@ -246,7 +256,7 @@ settings.gradle.kts               ✅ Gradle 프로젝트명 설정
 
 ```
 docker-compose.yml       ✅ Python + Kotlin + Redis 컨테이너 구성
-                            FIREBASE_STORAGE_BUCKET env 주입 (썸네일 signed URL용)
+                            python-ai healthcheck 추가 (GET /health, 15초 주기)
                             mediamtx(RTSP 테스트 서버) 제거됨
 serviceAccountKey.json   ✅ Firebase 서비스 계정 키 (git 제외 대상)
 .env                     ✅ 환경변수 파일 (git 제외 대상, FIREBASE_STORAGE_BUCKET 포함)
@@ -262,14 +272,19 @@ requirements.txt         ✅ Python 패키지 목록
 
 ```
 README.md                                   프로젝트 개요
-CHANGELOG.md                                브랜치별 변경 이력 (feature/parent-main 포함)
-v2.0_onsafe_api_spec.md                     v2.0 API 명세서
-v3.0_onsafe_api_spec.md                     v3.0 API 명세서
+CHANGELOG.md                                브랜치별 변경 이력
+v3.0_onsafe_api_spec.md                     v3.0 API 명세서 (HTTP+JPEG 기준, 구버전)
+v4.0_onsafe_api_spec.md                     v4.0 API 명세서 (WebSocket+landmark 기준, 최신)
 docs/
-├── camera-streaming-implementation.md      실시간 스트리밍 구현 상세
+├── camera-streaming-implementation.md      실시간 스트리밍 구현 상세 (Kotlin WebSocket)
 ├── project-structure.md                    이 파일 — 전체 프로젝트 구조
-└── unimplemented-items.md                  미구현 항목 목록 (#1 age/relation, Option2 MP4)
-                                            MP4 AWS S3 비용 시나리오 및 병목 분석 포함
+├── unimplemented-items.md                  미구현 항목 목록 (#1 age/relation, Option2 MP4)
+│                                           MP4 AWS S3 비용 시나리오 및 병목 분석 포함
+├── ai-engine-migration-plan.md             AI 추론 엔진 마이그레이션 계획 (Step 1~6 완료)
+├── ai-buffer-refactor-analysis.md          buffer.py 리팩터링 — should_infer() 제거 설계 (Step 3)
+├── ai-ondevice-plan.md                     On-device 추론 (Option C) 설계 계획
+├── ai-migration-test-report.md             AI 마이그레이션 테스트 보고서 (2026-05-29)
+└── ai-runtime-analysis.md                  런타임 리소스·병목·동시성·트랜잭션 분석
 ```
 
 ---
@@ -435,7 +450,7 @@ docs/
 | ✅ | `GET /api/camera/score/{userId}` | Redis score 캐시 기반 |
 | ✅ | `GET /api/camera/url/{device_id}` | Firestore camera_url 반환 |
 | ✅ | `GET /api/camera/status/{device_id}` | 기기 상태 반환 |
-| ✅ | `POST /api/camera/stream` | 추론·score 저장·internal API 호출 확인 |
+| ✅ | `WS /ws/stream` | landmark 수신·추론·score 저장·internal API 호출 확인 (v4.0 WebSocket 전환) |
 
 ---
 
