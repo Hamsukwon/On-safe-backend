@@ -62,9 +62,9 @@ src/main/kotlin/com/onsafe/backend/
     ├── camera/      # 위험도 조회·URL 관리·세션·WebSocket 스트리밍
     ├── internal/    # Python AI 서버 수신 API (realtime·fall-log·frame)
     ├── logs/        # 낙상 이력 CRUD·썸네일
-    ├── notification/ # FCM 알림 발송
+    ├── notification/ # FCM 알림 발송 (서비스만 유지, 외부 컨트롤러 제거)
     ├── settings/    # 알림 설정
-    └── user/        # 유저 정보 관리
+    └── user/        # 유저 정보 관리 (verify-password 포함)
 ```
 
 ---
@@ -104,7 +104,7 @@ docker-compose up --build
 
 서버 실행 후: `http://localhost:8080/swagger-ui.html`
 
-전체 명세: [`v3.0_onsafe_api_spec.md`](v3.0_onsafe_api_spec.md)
+전체 명세: [`v4.0_onsafe_api_spec.md`](v4.0_onsafe_api_spec.md) (v4.1 적용)
 
 ---
 
@@ -112,11 +112,10 @@ docker-compose up --build
 
 | 문서 | 내용 |
 |---|---|
+| [`docs/backend-logic-guide.md`](docs/backend-logic-guide.md) | 백엔드 내부 로직 구조 가이드 (도메인별 처리 흐름) |
 | [`docs/project-structure.md`](docs/project-structure.md) | 전체 파일 구조·역할·API 테스트 결과 |
-| [`docs/ses-email-verification.md`](docs/ses-email-verification.md) | AWS SES 이메일 인증번호 발송 구현 상세 |
-| [`docs/camera-streaming-implementation.md`](docs/camera-streaming-implementation.md) | 실시간 스트리밍 구현 상세 |
-| [`docs/unimplemented-items.md`](docs/unimplemented-items.md) | 미구현 항목 (#1 나이/관계, MP4 영상) |
-| [`docs/ai-engine-migration-plan.md`](docs/ai-engine-migration-plan.md) | AI 추론 엔진 마이그레이션 계획 (완료) |
+| [`docs/ai-engine-implementation-record.md`](docs/ai-engine-implementation-record.md) | AI 추론 엔진 마이그레이션 계획 (Step 1~6 완료) |
 | [`docs/ai-runtime-analysis.md`](docs/ai-runtime-analysis.md) | 런타임 병목·리소스·동시성 분석 |
-| [`CHANGELOG.md`](CHANGELOG.md) | 브랜치별 변경 이력 |
-| [`v4.0_onsafe_api_spec.md`](v4.0_onsafe_api_spec.md) | v4.0 API 명세서 (최신) |
+| [`docs/ai-buffer-refactor-analysis.md`](docs/ai-buffer-refactor-analysis.md) | buffer.py 리팩터링 설계 (should_infer() 제거) |
+| [`CHANGELOG.md`](CHANGELOG.md) | PR별 변경 이력 |
+| [`v4.0_onsafe_api_spec.md`](v4.0_onsafe_api_spec.md) | v4.1 API 명세서 (최신) |

@@ -2,7 +2,8 @@
 > **기준 레포**: `OnSafe/ai-server/main.py`  
 > **대상 파일**: `On-safe-backend/app/ai/engine.py` 및 관련 파일  
 > **작성일**: 2026-05-28  
-> **상태**: Step 1~4 완료 / Step 5 진행 중 (router.py·main.py 완료 / engine.py·service.py·buffer.py 미완) / Step 6 미착수
+> **최종 완료**: 2026-06-03 (PR #12 Step 1~6 완료 / PR #14 `_classify_level()` 추가)  
+> **상태**: ✅ **Step 1~6 전체 완료**
 
 ---
 
@@ -25,7 +26,7 @@
 
 ## 작업 목록
 
-### Step 1 — pkl 파일 교체
+### Step 1 — pkl 파일 교체 ✅ 완료
 
 **작업 내용**
 ```
@@ -42,8 +43,8 @@ On-safe-backend/pkl/decision_tree_model.pkl  →  삭제
 
 ### Step 2 — `app/ai/engine.py` 전면 재작성 ✅ 완료
 
-> **제약 조건 반영**: router.py(HTTP+JPEG) 외부 인터페이스 유지 →
-> `cv2`, `mediapipe` 제거 불가, JPEG 입력 방식 유지
+> **최종 구현**: Step 5(WebSocket 전환) 완료로 HTTP+JPEG 제약이 해소됨.
+> `cv2`, `mediapipe` **완전 제거**. `infer_landmarks()` 인터페이스로 전환 완료.
 
 #### 2-1. 제거 완료
 
@@ -54,10 +55,12 @@ On-safe-backend/pkl/decision_tree_model.pkl  →  삭제
 - `_center_dynamics()` — center 6개 → `center_distance`, `center_speed` 2개로 축소
 - `_device_state` dict — `_frame_buffers` deque로 대체
 
-#### 2-2. 유지 (HTTP+JPEG 제약)
+#### 2-2. 추가 제거 (Step 5 WebSocket 전환으로 HTTP+JPEG 제약 해소)
 
-- `import cv2`, `import mediapipe as mp` — JPEG 입력이므로 서버 측 MediaPipe 유지
-- `infer_frame(jpeg_bytes, device_id)` — 시그니처 유지 (fps 파라미터만 제거)
+- `import cv2`, `import mediapipe as mp` — WebSocket+landmark 전환으로 **완전 제거**
+- `_pose` MediaPipe Pose 싱글턴 — **제거**
+- `infer_frame(jpeg_bytes, device_id)` — **`infer_landmarks(landmarks, device_id, timestamp)` 로 교체**
+- `infer_frame_async()` — **`infer_landmarks_async()` 로 교체**
 
 #### 2-3. 추가 완료
 
@@ -90,19 +93,35 @@ _JOINTS_ORDER = [
 # FEATURE_COLUMNS 총 47개 (서버 시작 시 assert 검증)
 ```
 
-#### 2-5. 현재 공개 인터페이스
+#### 2-5. 현재 공개 인터페이스 (최종 구현)
 
 ```python
-# 기존 (fps 파라미터 있었음)
+# 최초 계획 (fps 파라미터 있었음)
 infer_frame(jpeg_bytes: bytes, device_id: str, fps: float) -> dict
 
-# 완료 (fps 제거, 시그니처 유지)
+# 중간 단계 (fps 제거)
 infer_frame(jpeg_bytes: bytes, device_id: str) -> dict
-# 윈도우 미달/STRIDE 미달: {"score": 0.0, "fall": False, "features": {}}
-# 추론 완료:              {"score": float, "fall": bool, "features": dict}
 
-async def infer_frame_async(jpeg_bytes: bytes, device_id: str) -> dict
+# ✅ 최종 구현 (Step 5 WebSocket 전환 완료)
+def infer_landmarks(landmarks: list, device_id: str, timestamp: float) -> dict
+# 윈도우 미달/STRIDE 미달: {"score": 0.0, "fall": False, "level": "정상", "features": {}}
+# 추론 완료:              {"score": float, "fall": bool, "level": str, "features": dict}
+
+async def infer_landmarks_async(landmarks: list, device_id: str, timestamp: float) -> dict
 ```
+
+#### 2-6. `_classify_level()` 추가 (PR #14)
+
+```python
+def _classify_level(score: float) -> str:
+    if score >= CRITICAL_THRESHOLD:   # >= 76.0
+        return "위험"
+    if score >= WARNING_THRESHOLD:    # >= 51.0
+        return "주의"
+    return "정상"
+```
+
+`infer_landmarks()` 반환값에 `level` 필드 포함. `service.py`의 중복 `_score_level()` 제거.
 
 ---
 
@@ -152,19 +171,19 @@ async def process_stream(jpeg_bytes: bytes, user_id: str, device_id: str) -> Str
 'center_distance', 'center_speed'
 ```
 
-#### 4-3. 변경하지 않은 항목 및 이유
+#### 4-3. 이후 변경 이력
 
-| 항목 | 결정 | 이유 |
+| 항목 | 당시 결정 | 최종 결과 |
 |---|---|---|
-| `_score_level()` 임계값 | 76/51 유지 | Kotlin RiskLevel.kt·InternalService.kt와 결합 — 동시 수정 필요하나 범위 확대 않기로 결정 |
-| 레벨 문자열 | "위험"/"주의"/"정상" 유지 | 임계값 유지에 따라 fromLabel() 수정 불필요 |
-| 분기 로직 | 숫자 비교 유지 | 위와 동일 |
+| `_score_level()` | Step 4에서 76/51 유지 결정 | **PR #14에서 `engine.py` `_classify_level()`로 통합, `service.py`에서 제거됨** |
+| 레벨 문자열 | "위험"/"주의"/"정상" 유지 | 동일하게 유지 (현재도 동일) |
+| 분기 로직 | 숫자 비교 유지 | `service.py` 하드코딩 유지 (76, 51), Kotlin은 PR #15에서 `RiskLevel` 상수로 교체 |
 
 ---
 
-### Step 5 — WebSocket 프로토콜 전환 🔄 진행 중
+### Step 5 — WebSocket 프로토콜 전환 ✅ 완료
 
-> **영향 파일**: router.py / main.py (완료) + engine.py / service.py / buffer.py (미완)  
+> **영향 파일**: router.py / main.py / engine.py / service.py / buffer.py (전체 완료)  
 > **인증**: `?token=` 쿼리파라미터 (Kotlin WS 패턴과 일치)  
 > **경로**: `/ws/stream` (Python :8000, 사용자 모드 전용)
 
@@ -189,7 +208,7 @@ WS /ws/stream?token={jwt}
 - JWT 검증: `decode_token(token)` → 실패 시 `close(code=1008)`
 - init / frame 메시지 분기 처리, `service.process_frame()` 호출
 
-#### 5-2. `app/ai/engine.py` — 미완료
+#### 5-2. `app/ai/engine.py` ✅ 완료
 
 JPEG 입력 제거, landmark JSON 직접 수신으로 전환.
 
@@ -216,9 +235,9 @@ def infer_landmarks(landmarks: list, device_id: str, timestamp: float) -> dict:
 제거 대상: `import cv2`, `import mediapipe as mp`, `_pose` 싱글턴, `_load_models()`의 MediaPipe 초기화  
 추가: `infer_landmarks()`, `infer_landmarks_async()`
 
-#### 5-3. `app/domain/camera/service.py` — 미완료
+#### 5-3. `app/domain/camera/service.py` ✅ 완료
 
-`process_stream()` → `process_frame()` 추가 (기존 함수는 Step 6까지 유지).
+`process_stream()` 제거, `process_frame()` 신규 구현 완료.
 
 ```python
 # 추가할 함수
@@ -246,14 +265,14 @@ async def process_frame(landmarks: list, timestamp: float, user_id: str, device_
 
 > **보호자 릴레이 보류**: `_publish_frame()` 호출 여부는 릴레이 방식 결정 후 반영
 
-#### 5-4. `app/ai/buffer.py` — 미완료
+#### 5-4. `app/ai/buffer.py` ✅ 완료
 
-`save_latest_frame(jpeg_bytes)` 호출처가 `process_stream()` → `process_frame()` 교체로 자연 제거됨.  
-함수 자체(save/get_latest_frame)는 보호자 릴레이 결정 전까지 유지, Step 6에서 최종 정리.
+`save_latest_frame()` 호출이 `process_stream()` 제거로 자연 해소됨.  
+함수 자체(save/get_latest_frame)는 보호자 릴레이 방식 미결정으로 코드 유지 중 (미사용 주석 표시).
 
 ---
 
-### Step 6 — requirements.txt / Dockerfile / 코드 정리
+### Step 6 — requirements.txt / Dockerfile / 코드 정리 ✅ 완료
 
 #### requirements.txt — 제거
 ```
@@ -573,11 +592,11 @@ FastAPI AI 서버 전체 제거 가능. Spring Boot만 유지.
 작업 완료 후 아래 항목을 순서대로 확인한다.
 
 - [ ] `assert len(FEATURE_COLUMNS) == 47` 서버 시작 시 통과
-- [ ] `GET /health` → `{"status": "ok", "model_loaded": true, "scaler_loaded": true}`
-- [ ] `OnSafe/ai-server/ws_test_client.py`로 WebSocket 연결 및 추론 결과 수신 확인
-- [ ] WARNING 이벤트: score 40~69 → Spring Boot `/internal/fall-log` 호출 확인
-- [ ] CRITICAL 이벤트: score ≥70 → COOLDOWN_SEC(10초) 내 중복 발행 차단 확인
-- [ ] 30프레임 미만 수신 시 추론 건너뜀 확인
+- [x] `GET /health` → `{"status": "ok", "model_loaded": true, "scaler_loaded": true}` ✅ (PR #12 추가)
+- [x] `scripts/test_ws_stream.py`로 WebSocket 연결 및 추론 결과 수신 확인 ✅ (ai-migration-test-report 참조)
+- [x] WARNING 이벤트: score **51~75** → Spring Boot `/internal/fall-log` 호출 확인 ✅
+- [x] CRITICAL 이벤트: score **≥76** → 쿨다운 **300초(5분)** 내 중복 WARNING 발행 차단 확인 ✅
+- [x] 30프레임 미만 수신 시 추론 건너뜀 확인 ✅
 
 ### Option C 추가 체크리스트
 

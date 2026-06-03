@@ -1,5 +1,37 @@
 # Changelog
 
+## [main] - 2026-06-03
+
+### PR #15 — 개인정보 수정 전 비밀번호 사전 확인 API 및 score 임계값 통일
+
+**변경 파일:** `UserController.kt`, `UserService.kt`, `VerifyPasswordRequest.kt` (신규), `RiskLevel.kt`, `RiskScoreResponse.kt`, `FallLogController.kt`, `FallLogRepository.kt`, `InternalService.kt`, `NotificationController.kt` (삭제), `docs/backend-logic-guide.md` (신규)
+
+#### Added
+- **`POST /api/users/{userId}/verify-password`**: 개인정보 수정 화면 진입 전 본인 확인용 비밀번호 사전 검증 엔드포인트. 불일치 시 401 반환
+- **`VerifyPasswordRequest.kt`**: 비밀번호 사전 확인 요청 DTO (`currentPassword` 필드)
+- **`RiskScoreResponse.updatedAt`**: `GET /api/camera/score/{userId}` 응답에 AI 서버 마지막 갱신 시각(`updated_at`) 추가
+- **`docs/backend-logic-guide.md`**: 백엔드 내부 로직 구조 가이드 신규 추가 (각 도메인 처리 흐름, 데이터 모델, FCM 알림 조건 등)
+
+#### Changed
+- **`RiskLevel.kt`**: `DANGER_THRESHOLD` 75 → 76, `WARNING_THRESHOLD` 50 → 51로 수정. `fromScore()` 조건을 `>` → `>=`로 변경하여 임계값 경계값 포함
+- **`FallLogRepository.kt`, `InternalService.kt`**: 하드코딩된 점수 임계값 제거 → `RiskLevel.DANGER_THRESHOLD`, `RiskLevel.WARNING_THRESHOLD` 상수 참조로 변경
+
+#### Removed
+- **`GET /api/fall-logs/{userId}/{logId}/download`**: `/thumbnail`로 대체 가능하여 중복 엔드포인트 삭제
+- **`NotificationController.kt`**: 외부 노출 불필요 판단으로 삭제 (`POST /api/notification/send` 제거). `NotificationService`는 `InternalService` 내부 호출용으로 유지
+
+---
+
+### PR #14 — engine에 WARNING 레벨 분류 추가 및 service 중복 로직 제거
+
+**변경 파일:** `app/ai/engine.py`, `app/domain/camera/service.py`
+
+#### Changed
+- **`app/ai/engine.py`**: `_classify_level()` private 메서드 추가 — 추론 결과(`score`)를 `정상/주의/위험`으로 분류하여 반환 딕셔너리에 `level` 필드 포함
+- **`app/domain/camera/service.py`**: `_score_level()` 중복 함수 제거 → `engine.infer_landmarks()` 반환 값의 `level` 필드를 직접 사용
+
+---
+
 ## [Unreleased] - feature/ai-engine-migration
 
 ### 2026-05-29 — AI 추론 엔진 마이그레이션 (Step 1~6 완료)
