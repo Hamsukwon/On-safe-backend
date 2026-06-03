@@ -261,13 +261,21 @@ def _step6_scale(df: pd.DataFrame) -> np.ndarray:
 
 # ── 핵심 추론 함수 (동기, 스레드 풀에서 실행) ──────────────────────────────────
 
+def _classify_level(score: float) -> str:
+    if score >= CRITICAL_THRESHOLD:
+        return "위험"
+    if score >= WARNING_THRESHOLD:
+        return "주의"
+    return "정상"
+
+
 def infer_landmarks(landmarks: list, device_id: str, timestamp: float) -> dict:
     """
-    landmark JSON → 30프레임 윈도우 → XGBoost → {"score": float, "fall": bool, "features": dict}
-    윈도우 미달 / STRIDE 미달 시 → {"score": 0.0, "fall": False, "features": {}}
+    landmark JSON → 30프레임 윈도우 → XGBoost → {"score": float, "fall": bool, "level": str, "features": dict}
+    윈도우 미달 / STRIDE 미달 시 → {"score": 0.0, "fall": False, "level": "정상", "features": {}}
     """
     if len(landmarks) != 33:
-        return {"score": 0.0, "fall": False, "features": {}}
+        return {"score": 0.0, "fall": False, "level": "정상", "features": {}}
 
     # ── landmark JSON → row dict (main.py build_row() 대응) ───────────────
     raw: dict = {}
@@ -284,9 +292,9 @@ def infer_landmarks(landmarks: list, device_id: str, timestamp: float) -> dict:
     _frame_counts[device_id] = _frame_counts.get(device_id, 0) + 1
 
     if len(buf) < WINDOW_SIZE:
-        return {"score": 0.0, "fall": False, "features": {}}
+        return {"score": 0.0, "fall": False, "level": "정상", "features": {}}
     if _frame_counts[device_id] % STRIDE != 0:
-        return {"score": 0.0, "fall": False, "features": {}}
+        return {"score": 0.0, "fall": False, "level": "정상", "features": {}}
 
     # ── 전처리 Step2~6 + XGBoost 추론 ─────────────────────────────────────
     try:
@@ -300,11 +308,12 @@ def infer_landmarks(landmarks: list, device_id: str, timestamp: float) -> dict:
         proba = _model.predict_proba(X)          # shape (30, 2)
         score = float(proba[:, 1].mean() * 100)  # 30프레임 평균
         fall  = bool(score >= CRITICAL_THRESHOLD)
+        level = _classify_level(score)
         feats = df_win[FEATURE_COLUMNS].iloc[-1].to_dict()
-        return {"score": score, "fall": fall, "features": feats}
+        return {"score": score, "fall": fall, "level": level, "features": feats}
     except Exception as e:
         print(f"[ai.engine] 추론 오류: {e}")
-        return {"score": 0.0, "fall": False, "features": {}}
+        return {"score": 0.0, "fall": False, "level": "정상", "features": {}}
 
 
 async def infer_landmarks_async(landmarks: list, device_id: str, timestamp: float) -> dict:

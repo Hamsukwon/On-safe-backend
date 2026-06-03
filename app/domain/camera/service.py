@@ -27,22 +27,14 @@ _REALTIME = "realtime_data"
 _REALTIME_LIMIT = 2000
 
 
-def _score_level(score: float) -> str:
-    if score >= 76:
-        return "위험"
-    if score >= 51:
-        return "주의"
-    return "정상"
-
-
 async def process_frame(landmarks: list, timestamp: float, user_id: str, device_id: str) -> StreamResponse:
     result = await infer_landmarks_async(landmarks, device_id, timestamp)
     if not result["features"]:  # 윈도우 미달 또는 STRIDE 미달
-        return StreamResponse(score=0.0, fall=False)
+        return StreamResponse(score=0.0, fall=False, level="정상")
     score: float = result["score"]
     fall: bool = result["fall"]
+    level: str = result["level"]
     features: dict = result["features"]
-    level = _score_level(score)
 
     await save_score(user_id, score, level)
     await _save_realtime_data(user_id, features, score)
