@@ -8,11 +8,8 @@ import com.onsafe.backend.domain.logs.service.FallLogService
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
-import org.springframework.http.HttpStatus
-import org.springframework.http.ResponseEntity
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.web.bind.annotation.*
-import java.net.URI
 
 @Tag(name = "FallLogs", description = "낙상 로그 API")
 @RestController
@@ -94,21 +91,4 @@ class FallLogController(private val fallLogService: FallLogService) {
         return ApiResponse.ok(mapOf("signed_url" to signedUrl))
     }
 
-    @Operation(
-        summary = "낙상 썸네일 다운로드 (#7)",
-        description = "signed URL로 302 redirect합니다. 썸네일이 없으면 404를 반환합니다.",
-        security = [SecurityRequirement(name = "BearerAuth")]
-    )
-    @GetMapping("/{userId}/{logId}/download")
-    suspend fun downloadThumbnail(
-        @PathVariable userId: String,
-        @PathVariable logId: String,
-        @AuthenticationPrincipal principal: String
-    ): ResponseEntity<Unit> {
-        if (principal != userId) throw BusinessException(ErrorCode.FORBIDDEN)
-        val signedUrl = fallLogService.getSignedUrl(userId, logId)
-        return ResponseEntity.status(HttpStatus.FOUND)
-            .location(URI.create(signedUrl))
-            .build()
-    }
 }

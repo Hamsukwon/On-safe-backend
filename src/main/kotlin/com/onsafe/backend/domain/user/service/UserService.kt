@@ -41,6 +41,14 @@ class UserService(
         return UserResponse.from(userRepository.save(updated))
     }
 
+    suspend fun verifyPassword(userId: String, currentPassword: String) {
+        val user = userRepository.findByUserId(userId)
+            ?: throw BusinessException(ErrorCode.USER_NOT_FOUND)
+        if (!passwordEncoder.matches(currentPassword, user.password)) {
+            throw BusinessException(ErrorCode.INVALID_PASSWORD)
+        }
+    }
+
     suspend fun deleteUser(userId: String) {
         if (!userRepository.existsByUserId(userId)) {
             throw BusinessException(ErrorCode.USER_NOT_FOUND)

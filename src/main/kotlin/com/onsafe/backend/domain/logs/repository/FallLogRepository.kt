@@ -6,6 +6,7 @@ import com.google.cloud.firestore.Query
 import com.onsafe.backend.common.util.await
 import com.onsafe.backend.common.util.toLocalDateTime
 import com.onsafe.backend.common.util.toTimestamp
+import com.onsafe.backend.domain.camera.model.entity.RiskLevel
 import com.onsafe.backend.domain.logs.model.entity.FallLog
 import org.springframework.stereotype.Repository
 import java.time.LocalDateTime
@@ -36,8 +37,8 @@ class FallLogRepository(private val firestore: Firestore) {
     }
 
     private fun FallLog.matchesLevel(level: String) = when (level) {
-        "위험" -> score >= 76f
-        "주의" -> score in 51f..75.99f
+        "위험" -> score >= RiskLevel.DANGER_THRESHOLD
+        "주의" -> score >= RiskLevel.WARNING_THRESHOLD && score < RiskLevel.DANGER_THRESHOLD
         else   -> true
     }
 

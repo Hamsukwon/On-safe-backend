@@ -24,7 +24,8 @@ class CameraService(
         return RiskScoreResponse(
             userId = userId,
             score = data.score,
-            level = data.level
+            level = data.level,
+            updatedAt = data.updatedAt
         )
     }
 

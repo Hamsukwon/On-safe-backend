@@ -1,6 +1,7 @@
 package com.onsafe.backend.domain.internal.service
 
 import com.onsafe.backend.domain.camera.model.entity.RealtimeData
+import com.onsafe.backend.domain.camera.model.entity.RiskLevel
 import com.onsafe.backend.domain.camera.repository.RealtimeDataRepository
 import com.onsafe.backend.domain.internal.model.dto.SaveFallLogRequest
 import com.onsafe.backend.domain.internal.model.dto.UpdateRealtimeRequest
@@ -43,7 +44,7 @@ class InternalService(
             )
         )
         val notifData = mapOf("log_id" to req.logId, "user_id" to req.userId, "score" to req.score.toString())
-        if (req.fall || req.score >= 76f) {
+        if (req.fall || req.score >= RiskLevel.DANGER_THRESHOLD) {
             sendNotificationSafe(
                 NotificationRequest(
                     userId = req.userId,
@@ -52,7 +53,7 @@ class InternalService(
                     data = notifData
                 )
             )
-        } else if (req.score >= 51f) {
+        } else if (req.score >= RiskLevel.WARNING_THRESHOLD) {
             sendNotificationSafe(
                 NotificationRequest(
                     userId = req.userId,
