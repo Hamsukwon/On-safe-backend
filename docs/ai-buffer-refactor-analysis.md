@@ -1,5 +1,5 @@
 # buffer.py 리팩터링 분석 — should_infer() 처리 방안
-> **연관 작업**: `docs/ai-engine-migration-plan.md` **Step 3** — buffer.py 수정 + service.py 연동 정리  
+> **연관 작업**: `docs/ai-engine-implementation-record.md` **Step 3** — buffer.py 수정 + service.py 연동 정리  
 > **작성일**: 2026-05-28  
 > **상태**: ✅ Step 3 구현 완료 (방안 A 적용)  
 > **결론**: 방안 A (engine.py 단일 책임) 채택 — `push_frame_count()` / `should_infer()` 제거, deque가 추론 타이밍 단일 판단

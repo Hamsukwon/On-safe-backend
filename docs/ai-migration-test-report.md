@@ -157,13 +157,14 @@ INFER frame=39 score=96.19 fall=True level=위험
 | 위험도 | 낮음 (현재 추론 결과 정상) |
 | 권장 조치 | scaler.pkl 재생성 (sklearn 1.8.0 환경에서 재학습 후 교체) |
 
-### 이슈 3 — `/health` 엔드포인트 없음 (미수정)
+### 이슈 3 — `/health` 엔드포인트 없음 ✅ 수정 완료 (PR #12)
 
 | 항목 | 내용 |
 |---|---|
 | 현상 | `GET /health` → 404 |
-| 영향 | Docker healthcheck, 모니터링 도구 연동 불가 |
-| 참고 | `OnSafe/ai-server/main.py`에는 `/health` 구현됨 |
+| 조치 | `app/main.py` startup에서 `_load_models()` eager load 추가, `GET /health` 엔드포인트 추가 (`model_loaded`, `scaler_loaded` 상태 반환) |
+| 결과 | `GET /health` → `{"status": "ok", "model_loaded": true, "scaler_loaded": true}` |
+| 추가 | `docker-compose.yml` python-ai healthcheck 연동 (GET /health, 15초 주기, start_period 20초) |
 
 ### 이슈 4 — JWT 거부 방식 (403 vs 1008)
 

@@ -1,7 +1,7 @@
 
 # On-safe-backend 프로젝트 구조
 
-> 최종 수정일: 2026-05-29 (feature/ai-engine-migration)
+> 최종 수정일: 2026-06-03 (main — PR #14, #15 반영)
 
 ---
 
@@ -29,6 +29,7 @@ app/
 │                                    infer_landmarks(landmarks, device_id, timestamp)
 │                                    Step2(NaN보정) → Step3(SGV) → Step4(골반정규화)
 │                                    → Step5(47피처) → Step6(StandardScaler) → predict_proba
+│                                    _classify_level(score): score → 정상/주의/위험 반환 (PR #14)
 ├── core/
 │   ├── config.py                 ✅ 환경변수 로드 — Firebase 경로, Redis URL, JWT 설정,
 │   │                                Kotlin internal base URL, firebase_storage_bucket
@@ -50,6 +51,7 @@ app/
     │                                - score≥76 or fall → _save_fall_log (jpeg_bytes=None)
     │                                - score 51~75 → 5분 쿨다운 통과 시 _save_fall_log
     │                                - Kotlin internal API 호출 (realtime · fall-log 위임)
+    │                                - _score_level() 제거됨 (PR #14) → engine 반환 level 직접 사용
     └── devices/
         ├── router.py             ✅ /api/devices/* 2개 엔드포인트 등록 (GET 목록 + POST 등록)
         ├── schemas.py            ✅ DeviceResponse, DeviceRegisterRequest
@@ -141,7 +143,7 @@ src/main/kotlin/com/onsafe/backend/
     │   │   │   ├── CameraSessionResponse.kt  ✅ 세션 상태 응답 (userId, status, 경과시간)
     │   │   │   ├── CameraUrlRequest.kt       ✅ 카메라 URL 업데이트 요청
     │   │   │   ├── DeviceResponse.kt         ✅ 기기 목록 단건 응답 DTO
-    │   │   │   ├── RiskScoreResponse.kt      ✅ 위험 점수 + colorCode 응답
+    │   │   │   ├── RiskScoreResponse.kt      ✅ 위험 점수 응답 (score, level, updatedAt — PR #15)
     │   │   │   └── RiskStatusResponse.kt     ✅ 기기 상태 응답
     │   │   └── entity/
     │   │       ├── CameraSessionStatus.kt    ✅ STANDBY / CONNECTING / LIVE enum
@@ -172,7 +174,7 @@ src/main/kotlin/com/onsafe/backend/
     │   │   └── FallLogController.kt     ✅ /api/fall-logs/*
     │   │                                   - 목록(?level 필터)·단건·확인(PATCH)·삭제
     │   │                                   - GET /{userId}/{logId}/thumbnail → signed URL JSON
-    │   │                                   - GET /{userId}/{logId}/download  → 302 redirect
+    │   │                                   - /download 삭제됨 (PR #15, /thumbnail로 대체)
     │   ├── model/
     │   │   ├── dto/
     │   │   │   └── FallLogResponse.kt   ✅ 낙상 로그 응답 DTO (hasThumbnail: Boolean 포함)
@@ -183,15 +185,15 @@ src/main/kotlin/com/onsafe/backend/
     │   └── service/
     │       └── FallLogService.kt        ✅ 낙상 로그 조회·확인·삭제, getSignedUrl() (StorageService 위임)
     ├── notification/
-    │   ├── controller/
-    │   │   └── NotificationController.kt ✅ POST /api/notification/send
+    │   ├── controller/               ❌ NotificationController.kt 삭제됨 (PR #15)
+    │   │                                POST /api/notification/send 외부 엔드포인트 제거
     │   ├── model/dto/
-    │   │   ├── NotificationRequest.kt   ✅ FCM 알림 전송 요청
-    │   │   └── NotificationResponse.kt  ✅ FCM 전송 결과 응답 (messageId 포함)
+    │   │   ├── NotificationRequest.kt   ✅ FCM 알림 전송 요청 (InternalService 내부 사용)
+    │   │   └── NotificationResponse.kt  ✅ FCM 전송 결과 응답 (InternalService 내부 사용)
     │   └── service/
-    │       └── NotificationService.kt   ✅ Firebase FCM 메시지 발송
-│                                       FCM 실패 시 BusinessException(FCM_SEND_FAILED) throw
-│                                       FCM 토큰 없으면 예외 없이 ok 반환 (정상 케이스)
+    │       └── NotificationService.kt   ✅ Firebase FCM 메시지 발송 (InternalService에서만 호출)
+    │                                       FCM 실패 시 BusinessException(FCM_SEND_FAILED) throw
+    │                                       FCM 토큰 없으면 예외 없이 ok 반환 (정상 케이스)
     ├── settings/
     │   ├── controller/
     │   │   └── SettingsController.kt    ✅ GET/PUT /notifications/{userId}, GET /retention/{userId}
@@ -210,16 +212,19 @@ src/main/kotlin/com/onsafe/backend/
         ├── controller/
         │   └── UserController.kt        ✅ GET/PUT/DELETE /api/users/{userId}
         │                                   PUT /api/users/{userId}/fcm-token
+        │                                   POST /api/users/{userId}/verify-password (PR #15 신규)
         ├── model/
         │   ├── dto/
-        │   │   ├── UserResponse.kt      ✅ 유저 정보 응답
-        │   │   └── UserUpdateRequest.kt ✅ 유저 정보 수정 요청
+        │   │   ├── UserResponse.kt          ✅ 유저 정보 응답
+        │   │   ├── UserUpdateRequest.kt     ✅ 유저 정보 수정 요청
+        │   │   └── VerifyPasswordRequest.kt ✅ 비밀번호 사전 확인 요청 (PR #15 신규)
         │   └── entity/
         │       └── User.kt              ✅ Firestore users 엔티티
         ├── repository/
         │   └── UserRepository.kt        ✅ Firestore users CRUD
         └── service/
             └── UserService.kt           ✅ 유저 조회·수정·탈퇴 비즈니스 로직
+                                            verifyPassword(): BCrypt 비교, 불일치 시 UNAUTHORIZED
 
 src/test/kotlin/com/onsafe/backend/
 ├── domain/
@@ -274,13 +279,11 @@ requirements.txt         ✅ Python 패키지 목록
 README.md                                   프로젝트 개요
 CHANGELOG.md                                브랜치별 변경 이력
 v3.0_onsafe_api_spec.md                     v3.0 API 명세서 (HTTP+JPEG 기준, 구버전)
-v4.0_onsafe_api_spec.md                     v4.0 API 명세서 (WebSocket+landmark 기준, 최신)
+v4.0_onsafe_api_spec.md                     v4.1 API 명세서 (WebSocket+landmark 기준, 최신)
 docs/
-├── camera-streaming-implementation.md      실시간 스트리밍 구현 상세 (Kotlin WebSocket)
+├── backend-logic-guide.md                  백엔드 내부 로직 구조 가이드 (PR #15 신규)
 ├── project-structure.md                    이 파일 — 전체 프로젝트 구조
-├── unimplemented-items.md                  미구현 항목 목록 (#1 age/relation, Option2 MP4)
-│                                           MP4 AWS S3 비용 시나리오 및 병목 분석 포함
-├── ai-engine-migration-plan.md             AI 추론 엔진 마이그레이션 계획 (Step 1~6 완료)
+├── ai-engine-implementation-record.md             AI 추론 엔진 마이그레이션 계획 (Step 1~6 완료)
 ├── ai-buffer-refactor-analysis.md          buffer.py 리팩터링 — should_infer() 제거 설계 (Step 3)
 ├── ai-ondevice-plan.md                     On-device 추론 (Option C) 설계 계획
 ├── ai-migration-test-report.md             AI 마이그레이션 테스트 보고서 (2026-05-29)
@@ -312,8 +315,9 @@ docs/
 - 직접 Firestore 저장 및 FCM 발송 코드 Python 측 없음
 
 ### 4. `RiskLevel.kt` 임계값 (Python과 통일)
-- `DANGER`: score ≥ 76, `WARNING`: score 51~75, `NORMAL`: score ≤ 50
-- Python `_score_level()` 동일 기준 적용
+- `DANGER`: score ≥ 76 (`DANGER_THRESHOLD = 76f`), `WARNING`: score 51~75 (`WARNING_THRESHOLD = 51f`), `NORMAL`: score < 51
+- `fromScore()` 조건: `>= DANGER_THRESHOLD → DANGER`, `>= WARNING_THRESHOLD → WARNING` (경계값 포함, PR #15)
+- Python `engine.py _classify_level()` 동일 기준 적용 (PR #14에서 service.py 중복 제거)
 
 ### 5. Kotlin Jackson SNAKE_CASE 전략
 - `spring.jackson.property-naming-strategy: SNAKE_CASE` 전역 설정
@@ -374,6 +378,7 @@ docs/
 |------|-----------|------|
 | ✅ | `GET /api/users/{userId}` | |
 | ✅ | `PUT /api/users/{userId}` | |
+| ✅ | `POST /api/users/{userId}/verify-password` | PR #15 신규, 비밀번호 사전 확인 |
 | ✅ | `DELETE /api/users/{userId}` | |
 | ✅ | `PUT /api/users/{userId}/fcm-token` | FcmTokenUpdateRequest 사용 |
 
@@ -405,7 +410,7 @@ docs/
 | ✅ | `GET /api/fall-logs/{userId}?level=주의` | 레벨 필터 |
 | ✅ | `GET /api/fall-logs/{userId}/{logId}` | 단건 조회 |
 | ✅ | `GET /api/fall-logs/{userId}/{logId}/thumbnail` | signed URL JSON 반환 |
-| ✅ | `GET /api/fall-logs/{userId}/{logId}/download` | 302 redirect to signed URL |
+| — | `GET /api/fall-logs/{userId}/{logId}/download` | 삭제됨 (PR #15, /thumbnail로 대체) |
 | ✅ | `PATCH /api/fall-logs/{userId}/{logId}/confirm` | |
 | ✅ | `DELETE /api/fall-logs/{userId}/{logId}` | |
 
@@ -417,12 +422,6 @@ docs/
 | ✅ | `PUT /api/settings/notifications/{userId}` | fallSensitivity 제거됨 |
 | ✅ | `GET /api/settings/retention/{userId}` | 항상 retentionDays: 30 반환 |
 | — | `PUT /api/settings/retention/{userId}` | 제거됨 (서버 고정 30일) |
-
-#### Notification
-
-| 결과 | 엔드포인트 | 비고 |
-|------|-----------|------|
-| ✅ | `POST /api/notification/send` | FCM messageId 반환 확인 |
 
 #### Internal (Python → Kotlin 전용)
 
