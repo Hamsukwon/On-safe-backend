@@ -44,7 +44,7 @@ class InternalService(
             )
         )
         val notifData = mapOf("log_id" to req.logId, "user_id" to req.userId, "score" to req.score.toString())
-        if (req.fall || req.score >= RiskLevel.DANGER_THRESHOLD) {
+        if (req.fall || req.score > RiskLevel.DANGER_THRESHOLD) {
             sendNotificationSafe(
                 NotificationRequest(
                     userId = req.userId,
@@ -53,7 +53,7 @@ class InternalService(
                     data = notifData
                 )
             )
-        } else if (req.score >= RiskLevel.WARNING_THRESHOLD) {
+        } else if (req.score > RiskLevel.WARNING_THRESHOLD) {
             sendNotificationSafe(
                 NotificationRequest(
                     userId = req.userId,
