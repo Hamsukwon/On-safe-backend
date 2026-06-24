@@ -24,8 +24,8 @@ _PKL_DIR = Path(__file__).parent.parent.parent / "pkl"
 # ── 추론 파라미터 ──────────────────────────────────────────────────────────────
 WINDOW_SIZE        = 30    # 슬라이딩 윈도우 프레임 수
 STRIDE             = 5     # 추론 호출 간격 (프레임)
-WARNING_THRESHOLD  = 51.0  # 주의
-CRITICAL_THRESHOLD = 76.0  # 위험
+WARNING_THRESHOLD  = 50.0  # 주의
+CRITICAL_THRESHOLD = 75.0  # 위험
 
 # ── 관절 트리플 / 피처 순서 (학습 파이프라인과 1:1 동일) ──────────────────────
 _JOINT_TRIPLETS = [
@@ -262,9 +262,9 @@ def _step6_scale(df: pd.DataFrame) -> np.ndarray:
 # ── 핵심 추론 함수 (동기, 스레드 풀에서 실행) ──────────────────────────────────
 
 def _classify_level(score: float) -> str:
-    if score >= CRITICAL_THRESHOLD:
+    if score > CRITICAL_THRESHOLD:
         return "위험"
-    if score >= WARNING_THRESHOLD:
+    if score > WARNING_THRESHOLD:
         return "주의"
     return "정상"
 
@@ -307,7 +307,7 @@ def infer_landmarks(landmarks: list, device_id: str, timestamp: float) -> dict:
 
         proba = _model.predict_proba(X)          # shape (30, 2)
         score = float(proba[:, 1].mean() * 100)  # 30프레임 평균
-        fall  = bool(score >= CRITICAL_THRESHOLD)
+        fall  = bool(score > CRITICAL_THRESHOLD)
         level = _classify_level(score)
         feats = df_win[FEATURE_COLUMNS].iloc[-1].to_dict()
         return {"score": score, "fall": fall, "level": level, "features": feats}
