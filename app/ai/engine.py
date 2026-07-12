@@ -10,6 +10,7 @@ landmark JSON → 30프레임 슬라이딩 윈도우 → XGBoost 추론
   Step6 → _step6_scale()             (Make_AI.ipynb)
 """
 import asyncio
+import logging
 from collections import deque
 from pathlib import Path
 
@@ -17,6 +18,8 @@ import joblib
 import numpy as np
 import pandas as pd
 from scipy.signal import savgol_filter
+
+logger = logging.getLogger(__name__)
 
 # ── 경로 상수 ──────────────────────────────────────────────────────────────────
 _PKL_DIR = Path(__file__).parent.parent.parent / "pkl"
@@ -312,7 +315,7 @@ def infer_landmarks(landmarks: list, device_id: str, timestamp: float) -> dict:
         feats = df_win[FEATURE_COLUMNS].iloc[-1].to_dict()
         return {"score": score, "fall": fall, "level": level, "features": feats}
     except Exception as e:
-        print(f"[ai.engine] 추론 오류: {e}")
+        logger.error("추론 오류 device_id=%s: %s", device_id, e, exc_info=True)
         return {"score": 0.0, "fall": False, "level": "정상", "features": {}}
 
 

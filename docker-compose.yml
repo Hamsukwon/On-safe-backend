@@ -61,6 +61,15 @@ services:
     container_name: onsafe-redis
     ports:
       - "6379:6379"
+    # AOF 영속성: 컨테이너 재시작 후에도 데이터 복구
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -73,3 +82,6 @@ services:
 networks:
   onsafe-network:
     driver: bridge
+
+volumes:
+  redis-data:

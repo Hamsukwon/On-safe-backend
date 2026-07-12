@@ -4,6 +4,7 @@
 - score: Redis에서 현재 위험 점수 조회
 - status / url: Firestore devices 컬렉션 조회
 """
+import logging
 import uuid
 from datetime import datetime, timezone
 
@@ -19,6 +20,8 @@ from app.domain.camera.schemas import (
     StreamResponse, ScoreResponse, StatusResponse,
     CameraUrlResponse,
 )
+
+logger = logging.getLogger(__name__)
 
 _DEVICES = "devices"
 
@@ -88,7 +91,7 @@ async def _save_realtime_data(user_id: str, features: dict, score: float) -> Non
         for doc in old_docs:
             await doc.reference.delete()
     except Exception as e:
-        print(f"[camera.service] realtime_data 정리 오류 (Firestore 복합 인덱스 미생성): {e}")
+        logger.warning("realtime_data 정리 실패 user_id=%s (Firestore 복합 인덱스 확인 필요): %s", user_id, e)
 
 
 
@@ -101,7 +104,7 @@ async def _update_realtime(user_id: str, score: float, level: str) -> None:
                 timeout=3.0,
             )
     except Exception as e:
-        print(f"[camera.service] /internal/realtime 호출 오류: {e}")
+        logger.error("/internal/realtime 호출 실패 user_id=%s: %s", user_id, e)
 
 
 async def _save_fall_log(user_id: str, device_id: str, score: float, fall: bool, jpeg_bytes: bytes | None) -> str:
@@ -112,7 +115,7 @@ async def _save_fall_log(user_id: str, device_id: str, score: float, fall: bool,
         try:
             image_url = await upload_thumbnail(log_id, jpeg_bytes)
         except Exception as e:
-            print(f"[camera.service] 썸네일 업로드 오류 (fall-log는 계속 저장): {e}")
+            logger.warning("썸네일 업로드 실패 log_id=%s (fall-log는 계속 저장): %s", log_id, e)
 
     try:
         async with httpx.AsyncClient() as client:
@@ -130,7 +133,7 @@ async def _save_fall_log(user_id: str, device_id: str, score: float, fall: bool,
                 timeout=3.0,
             )
     except Exception as e:
-        print(f"[camera.service] /internal/fall-log 호출 오류: {e}")
+        logger.error("/internal/fall-log 호출 실패 log_id=%s user_id=%s: %s", log_id, user_id, e)
     return log_id
 
 

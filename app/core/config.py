@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     jwt_access_expiry: int = 3600
     jwt_refresh_expiry: int = 604800
     kotlin_internal_base: str = "http://localhost:8080"
+    # CORS: 쉼표로 구분된 허용 출처 목록. 미설정 시 Kotlin 서버만 허용
+    cors_origins: str = ""
 
     model_config = {"env_file": ".env"}
 
