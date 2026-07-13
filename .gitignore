@@ -230,6 +230,9 @@ application-prod.yml
 ### Claude Code 로컬 설정 ###
 .claude/settings.local.json
 
+### 내부 작업 문서 (git 추적 제외 — v4.0/v3.0 API 명세서는 저장소 루트에 있어 영향 없음) ###
+docs/
+
 ### 민감 정보 ###
 local.properties
 .env
