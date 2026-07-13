@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 import httpx
 from google.cloud.firestore_v1.base_query import FieldFilter
 from app.ai.buffer import save_score, get_score, check_caution_cooldown
-from app.ai.engine import infer_landmarks_async
+from app.ai.engine import infer_landmarks_async, WARNING_THRESHOLD, CRITICAL_THRESHOLD
 from app.core.config import settings
 from app.core.exceptions import not_found
 from app.core.firebase import get_firestore
@@ -44,9 +44,9 @@ async def process_frame(landmarks: list, timestamp: float, user_id: str, device_
     await _update_realtime(user_id, score, level)
 
     log_id: str | None = None
-    if score >= 76 or fall:
+    if score > CRITICAL_THRESHOLD or fall:
         log_id = await _save_fall_log(user_id, device_id, score, fall, jpeg_bytes=None)
-    elif score >= 51:
+    elif score > WARNING_THRESHOLD:
         if await check_caution_cooldown(user_id):
             log_id = await _save_fall_log(user_id, device_id, score, fall, jpeg_bytes=None)
 

@@ -78,8 +78,8 @@ On-safe-backend/pkl/decision_tree_model.pkl  →  삭제
 ```python
 WINDOW_SIZE        = 30    # 슬라이딩 윈도우 프레임 수
 STRIDE             = 5     # 추론 호출 간격
-WARNING_THRESHOLD  = 51.0  # 시스템 기준 51/76으로 통일 (최초 계획 40/70에서 변경)
-CRITICAL_THRESHOLD = 76.0  # Kotlin InternalService·RiskLevel.kt와 일치
+WARNING_THRESHOLD  = 50.0  # 최초 계획 40/70 → 51/76(본 문서 완료 시점) → 50/75로 재수정 (2026-06-24, ea13763)
+CRITICAL_THRESHOLD = 75.0  # Kotlin InternalService·RiskLevel.kt와 일치 (`>` 비교, 경계값 제외)
 
 _JOINTS_ORDER = [
     'neck', 'shoulder_balance',
@@ -110,18 +110,23 @@ def infer_landmarks(landmarks: list, device_id: str, timestamp: float) -> dict
 async def infer_landmarks_async(landmarks: list, device_id: str, timestamp: float) -> dict
 ```
 
-#### 2-6. `_classify_level()` 추가 (PR #14)
+#### 2-6. `_classify_level()` 추가 (PR #14, 2026-06-24 임계값/연산자 재수정)
 
 ```python
+# 현재 구현 (ea13763, 2026-06-24) — 최초 PR #14 시점은 >= 76.0 / >= 51.0 이었음
 def _classify_level(score: float) -> str:
-    if score >= CRITICAL_THRESHOLD:   # >= 76.0
+    if score > CRITICAL_THRESHOLD:    # > 75.0
         return "위험"
-    if score >= WARNING_THRESHOLD:    # >= 51.0
+    if score > WARNING_THRESHOLD:     # > 50.0
         return "주의"
     return "정상"
 ```
 
 `infer_landmarks()` 반환값에 `level` 필드 포함. `service.py`의 중복 `_score_level()` 제거.
+
+> **2026-06-24 재수정**: `>=` 비교와 51/76 임계값은 경계값(51.0, 76.0)을 잘못된 등급으로 분류하는 문제가 있어
+> `>` 비교와 50/75로 변경됨 (`ea13763`). Kotlin `RiskLevel.kt`도 하루 전(2026-06-05, `f62a153`) 동일하게 수정됨.
+> 상세: `docs/project-structure.md` "⚠️ 주의사항" 1·4번 참고.
 
 ---
 

@@ -37,8 +37,8 @@ class FallLogRepository(private val firestore: Firestore) {
     }
 
     private fun FallLog.matchesLevel(level: String) = when (level) {
-        "위험" -> score >= RiskLevel.DANGER_THRESHOLD
-        "주의" -> score >= RiskLevel.WARNING_THRESHOLD && score < RiskLevel.DANGER_THRESHOLD
+        "위험" -> score > RiskLevel.DANGER_THRESHOLD
+        "주의" -> score > RiskLevel.WARNING_THRESHOLD && score <= RiskLevel.DANGER_THRESHOLD
         else   -> true
     }
 

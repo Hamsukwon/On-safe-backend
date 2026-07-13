@@ -2,6 +2,21 @@
 
 ## [main] - 2026-06-03
 
+### 설정 API 실기기 통합 테스트 완료
+
+**테스트 환경:** Android 실기기(SM-F721N, Android 16) + USB adb reverse + Docker Compose (kotlin-api :8080, python-ai :8000, redis :6379)
+
+| 기능 | 엔드포인트 | 결과 |
+|------|-----------|------|
+| 설정화면 보호자명 표시 | `GET /api/users/{userId}` | ✅ |
+| 알림 설정 ON/OFF 저장·복원 | `GET·PUT /api/settings/notifications/{userId}` | ✅ |
+| 개인정보 수정 진입 본인확인 | `POST /api/users/{userId}/verify-password` | ✅ |
+| 비밀번호 변경 | `PUT /api/users/{userId}` (MODE_SETTINGS) | ✅ |
+| 로그아웃 (Redis 토큰 블랙리스트) | `POST /api/auth/logout` | ✅ |
+| 회원탈퇴 (Firestore 문서 삭제) | `DELETE /api/users/{userId}` | ✅ |
+
+---
+
 ### PR #15 — 개인정보 수정 전 비밀번호 사전 확인 API 및 score 임계값 통일
 
 **변경 파일:** `UserController.kt`, `UserService.kt`, `VerifyPasswordRequest.kt` (신규), `RiskLevel.kt`, `RiskScoreResponse.kt`, `FallLogController.kt`, `FallLogRepository.kt`, `InternalService.kt`, `NotificationController.kt` (삭제), `docs/backend-logic-guide.md` (신규)

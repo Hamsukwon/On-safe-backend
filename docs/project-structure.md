@@ -1,7 +1,7 @@
 
 # On-safe-backend 프로젝트 구조
 
-> 최종 수정일: 2026-06-03 (main — PR #14, #15 반영)
+> 최종 수정일: 2026-07-13 (main — PR #16~#18 및 임계값 수정(f62a153, ea13763) 반영)
 
 ---
 
@@ -21,6 +21,9 @@
 app/
 ├── main.py                       ✅ 앱 진입점 — 라우터 등록, CORS, Firebase 초기화
 │                                    startup: _load_models() eager load, GET /health 엔드포인트
+│                                    logging.config.dictConfig 전역 설정 (PR #18, print() 대체)
+│                                    CORS allow_origins: kotlin_internal_base + CORS_ORIGINS 환경변수
+│                                    (기존 "*" 와일드카드 제거, PR #18 — communication-issues-analysis.md 문제3 해결)
 ├── ai/
 │   ├── __init__.py               — 패키지 초기화
 │   ├── buffer.py                 ✅ Redis 관리 — score 캐시, 주의(51~75) 이벤트 5분 쿨다운
@@ -46,10 +49,11 @@ app/
     │   │                            WS: /ws/stream?token= (landmark 수신·추론·결과 반환)
     │   │                            ws_router 분리하여 main.py에 별도 등록
     │   ├── schemas.py            ✅ StreamResponse(score, fall, level, log_id), ScoreResponse 등
-    │   └── service.py            ✅ 핵심 비즈니스 로직
+    │   └── service.py            ✅ 핵심 비즈니스 로직 (PR #18: print → logging 전환)
     │                                - process_frame(): landmark → 추론 → realtime·fall-log 위임
-    │                                - score≥76 or fall → _save_fall_log (jpeg_bytes=None)
-    │                                - score 51~75 → 5분 쿨다운 통과 시 _save_fall_log
+    │                                - score>75 or fall → _save_fall_log (jpeg_bytes=None, 항상 None — 주의사항 2번 참고)
+    │                                - score>50 (51~75 아님, 경계값 제외) → 5분 쿨다운 통과 시 _save_fall_log
+    │                                - engine.py의 WARNING_THRESHOLD/CRITICAL_THRESHOLD(50/75) 상수를 import해 사용 (2026-07-13, 하드코딩 제거)
     │                                - Kotlin internal API 호출 (realtime · fall-log 위임)
     │                                - _score_level() 제거됨 (PR #14) → engine 반환 level 직접 사용
     └── devices/
@@ -263,6 +267,11 @@ settings.gradle.kts               ✅ Gradle 프로젝트명 설정
 docker-compose.yml       ✅ Python + Kotlin + Redis 컨테이너 구성
                             python-ai healthcheck 추가 (GET /health, 15초 주기)
                             mediamtx(RTSP 테스트 서버) 제거됨
+                            Redis AOF 영속성(appendonly yes, everysec) + maxmemory 512mb
+                            + allkeys-lru 정책 + redis-data 볼륨 마운트 (PR #18)
+.github/workflows/backend-ci.yml  ✅ GitHub Actions — Python import 검증·pytest,
+                            Kotlin 단위테스트, Docker 이미지 빌드, main 푸시 시
+                            Docker Hub push (PR #18 신규)
 serviceAccountKey.json   ✅ Firebase 서비스 계정 키 (git 제외 대상)
 .env                     ✅ 환경변수 파일 (git 제외 대상, FIREBASE_STORAGE_BUCKET 포함)
 .env.example             ✅ 환경변수 예시 (FIREBASE_STORAGE_BUCKET 포함)
@@ -284,28 +293,36 @@ docs/
 ├── backend-logic-guide.md                  백엔드 내부 로직 구조 가이드 (PR #15 신규)
 ├── project-structure.md                    이 파일 — 전체 프로젝트 구조
 ├── ai-engine-implementation-record.md             AI 추론 엔진 마이그레이션 계획 (Step 1~6 완료)
+├── ai-engine-migration-presentation.md     AI 엔진 마이그레이션 발표 대본
 ├── ai-buffer-refactor-analysis.md          buffer.py 리팩터링 — should_infer() 제거 설계 (Step 3)
 ├── ai-ondevice-plan.md                     On-device 추론 (Option C) 설계 계획
 ├── ai-migration-test-report.md             AI 마이그레이션 테스트 보고서 (2026-05-29)
-└── ai-runtime-analysis.md                  런타임 리소스·병목·동시성·트랜잭션 분석
+├── ai-runtime-analysis.md                  런타임 리소스·병목·동시성·트랜잭션 분석
+├── notification-service-architecture.md    NotificationService 분리 설계 결정
+├── communication-issues-analysis.md        HTTP+WebSocket 통신 구조 문제 분석 (2026-07-08, 문제3 PR #18로 해결)
+├── redis-operations-analysis.md            Redis 운영 분석 — TTL·메모리·eviction (2026-07-08, 일부 PR #18로 해결)
+├── 20260602_settings_API_연동_작업정리.md   설정 화면 API 연동 작업 정리 (Android + 백엔드)
+└── mp4-storage-migration.md                낙상 로그 썸네일(JPEG)→동영상(MP4) 저장 배관 전환 작업 기록 (신규)
 ```
 
 ---
 
 ## ⚠️ 주의사항 / 알려진 동작
 
-### 1. 낙상 로그 저장 트리거 (2026-05-17 기준)
-- **score ≥ 76 or fall = True** → 즉시 FallLog 저장 + 위험/낙상 FCM 알림 (쿨다운 없음)
-- **score 51~75 (주의)** → Python `check_caution_cooldown()` 통과 시만 FallLog 저장 + 주의 FCM 알림
+### 1. 낙상 로그 저장 트리거 (2026-07-13 기준 — 임계값 50/75로 수정, 경계값 제외)
+- **score > 75 or fall = True** → 즉시 FallLog 저장 + 위험/낙상 FCM 알림 (쿨다운 없음)
+- **score > 50 (주의, 50 초과 75 이하)** → Python `check_caution_cooldown()` 통과 시만 FallLog 저장 + 주의 FCM 알림
   - 쿨다운: 기본 5분 (Redis `caution_cd:{userId}` NX 플래그)
   - `/internal/fall-log` 직접 호출 시 쿨다운 우회됨 (Python 서버 측 로직)
-- **score < 51 (정상)** → FallLog 미저장, 알림 없음
+- **score ≤ 50 (정상)** → FallLog 미저장, 알림 없음
+- 값 변경 이력: 최초 51/76(`>=`) → `f62a153`/`ea13763`(2026-06-05, 2026-06-24)에서 50/75(`>`)로 통일. Kotlin `RiskLevel.kt`도 동일 커밋에서 함께 수정됨
+- `service.py`는 기존에 76/51을 하드코딩해 engine.py(당시 이미 50/75로 수정됨)와 값이 어긋나 있었으나, 2026-07-13에 engine.py의 `WARNING_THRESHOLD`/`CRITICAL_THRESHOLD` 상수를 import하는 방식으로 수정해 두 값이 항상 일치하도록 개선함
 
-### 2. 썸네일 저장 방식 (GCS Signed URL)
-- Python이 낙상 감지 시 JPEG → `fall-thumbnails/{logId}.jpg` GCS 경로로 Firebase Storage 업로드
-- Firestore `fall_logs` 문서에 `image_url` = GCS 경로 저장 (URL 아님)
-- 클라이언트는 `hasThumbnail: Boolean` 만 수신 (GCS 경로 비노출)
-- `GET /thumbnail` 또는 `GET /download` 호출 시 Kotlin StorageService가 V4 Signed URL 온디맨드 발급 (1시간 유효)
+### 2. 썸네일(→ 동영상) 저장 방식 — 현재 사실상 비활성 상태 (2026-07-13 확인)
+- Step 5(WebSocket+landmark 전환) 이후 Python 서버는 JPEG 프레임을 더 이상 받지 않음
+- `process_frame()`이 `_save_fall_log()`를 호출할 때 **항상 `jpeg_bytes=None`으로 호출** → `upload_thumbnail()`은 현재 아키텍처에서 호출될 수 없는 데드 코드였고, `fall_logs.image_url`은 실질적으로 항상 null
+- GCS Signed URL 발급 흐름(`GET /thumbnail`, Kotlin `StorageService` V4 서명) 자체는 정상 동작하지만 저장되는 데이터가 없어 실사용 불가 상태였음
+- `feature/fall-log-mp4-storage` 브랜치에서 썸네일(JPEG) 저장 배관을 동영상(MP4) 저장 배관으로 교체 작업 진행 중 — 실제 비디오 바이트 소스는 이번 작업 범위 밖(추후 별도 설계), 배관만 우선 image→video로 전환. 상세 진행 기록은 `docs/mp4-storage-migration.md` 참고
 
 ### 3. Python ↔ Kotlin 내부 API 연동
 - `camera/service.py`가 매 추론 후 `POST /internal/realtime` 호출 → Kotlin이 `realtime_data/{userId}` **단일 문서 덮어쓰기**
@@ -314,10 +331,11 @@ docs/
 - 낙상·위험·주의 감지 시 `POST /internal/fall-log` 호출 → Kotlin이 `fall_logs` 저장 + FCM 발송
 - 직접 Firestore 저장 및 FCM 발송 코드 Python 측 없음
 
-### 4. `RiskLevel.kt` 임계값 (Python과 통일)
-- `DANGER`: score ≥ 76 (`DANGER_THRESHOLD = 76f`), `WARNING`: score 51~75 (`WARNING_THRESHOLD = 51f`), `NORMAL`: score < 51
-- `fromScore()` 조건: `>= DANGER_THRESHOLD → DANGER`, `>= WARNING_THRESHOLD → WARNING` (경계값 포함, PR #15)
-- Python `engine.py _classify_level()` 동일 기준 적용 (PR #14에서 service.py 중복 제거)
+### 4. `RiskLevel.kt` 임계값 (Python과 통일, 2026-06-05/06-24 재수정)
+- `DANGER`: score > 75 (`DANGER_THRESHOLD = 75f`), `WARNING`: score 50 초과 75 이하 (`WARNING_THRESHOLD = 50f`), `NORMAL`: score ≤ 50
+- `fromScore()` 조건: `> DANGER_THRESHOLD → DANGER`, `> WARNING_THRESHOLD → WARNING` (경계값 **제외**, `f62a153`에서 `>=` → `>`로 변경, PR #15의 경계값 포함 방침을 뒤집음)
+- Python `engine.py _classify_level()` 동일 기준 적용 (`WARNING_THRESHOLD=50.0`, `CRITICAL_THRESHOLD=75.0`, `>` 비교 — `ea13763`)
+- `InternalService.saveFallLog()`의 알림 분기 조건도 동일 커밋에서 `>=` → `>`로 함께 수정됨
 
 ### 5. Kotlin Jackson SNAKE_CASE 전략
 - `spring.jackson.property-naming-strategy: SNAKE_CASE` 전역 설정
@@ -465,3 +483,11 @@ docs/
 | 2026-05-17 | 주의(51~75) 이벤트 미저장·알림 없음 | ✅ Python 쿨다운 + Kotlin 분기 구현 완료 |
 | 2026-05-19 | `POST /internal/fall-log` FCM 토큰 무효 시 500 (`NotificationService` Firebase 예외 미처리) | ✅ 구조 개선 (2026-05-27) — FCM 실패 시 `BusinessException(FCM_SEND_FAILED)` throw, `InternalService.sendNotificationSafe()`에서 흡수. DB 저장·FCM 전송 독립 보장 |
 | 2026-05-19 | Python `GET /api/devices/{userId}` 405 (라우터에 GET 미등록) | ✅ `router.py` GET 엔드포인트 + `service.py` `get_devices()` 추가 |
+| 2026-06-05 | `RiskLevel.kt` 경계값(50.0/75.0)이 잘못된 레벨로 분류(`>=` 사용) | ✅ `f62a153` — `>` 비교로 수정, 임계값 76f/51f → 75f/50f |
+| 2026-06-24 | Python `engine.py`가 Kotlin과 다른 임계값(51.0/76.0, `>=`) 사용 | ✅ `ea13763` — 50.0/75.0, `>` 비교로 Kotlin과 통일 |
+| 2026-07-13 | `camera/service.py`의 `_save_fall_log` 트리거가 하드코딩된 76/51(`>=`)을 사용해 engine.py(50/75, `>`)와 불일치 | ✅ engine.py의 `WARNING_THRESHOLD`/`CRITICAL_THRESHOLD` 상수를 import하여 사용하도록 수정 |
+| 2026-07-12 | Python AI 서버 CORS 전체 오리진 허용(`allow_origins=["*"]`) — `communication-issues-analysis.md` 문제3 | ✅ PR #18 — `kotlin_internal_base` + `CORS_ORIGINS` 환경변수로 제한 |
+| 2026-07-12 | Redis 영속성 미설정 — 재시작 시 JWT 블랙리스트 소멸 (`redis-operations-analysis.md`) | ✅ PR #18 — AOF(`appendonly yes`) + `redis-data` 볼륨 마운트 (단, eviction 정책은 권장한 `volatile-lru`가 아닌 `allkeys-lru` 적용) |
+| — | Python AI WebSocket이 로그아웃 토큰 블랙리스트를 확인하지 않음 (`communication-issues-analysis.md` 문제1) | ⬜ 미해결 |
+| — | 두 WebSocket(`/ws/stream`, `/ws/camera`) 생명주기 비동기화 (`communication-issues-analysis.md` 문제2) | ⬜ 미해결 |
+| — | 낙상 감지 시 썸네일(JPEG) 저장이 WebSocket 전환 이후 데드 코드 (`jpeg_bytes` 항상 None) | 🔄 `feature/fall-log-mp4-storage`에서 MP4 저장 배관으로 전환 작업 중 (`docs/mp4-storage-migration.md`) |

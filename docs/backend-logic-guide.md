@@ -59,14 +59,14 @@
 | 이력 삭제 | 소유권 확인 → Firestore fall_logs/{logId} 문서 삭제 |
 | 위험도 필터 | 위험(score >= 76) / 주의(score 51~75) |
 | 이력 확인처리 | Firestore `is_confirmed = true` 업데이트 |
-| 썸네일 조회 | GCS V4 서명 URL 생성 (1시간 유효) |
+| 썸네일 조회 | GCS V4 서명 URL 생성 (1시간 유효) — ⚠️ 2026-07-13 기준 `image_url`이 저장되지 않아(아래 참고) 실질적으로 항상 404. `feature/fall-log-mp4-storage`에서 동영상 저장으로 전환 중 |
 
 **6. INTERNAL — AI 서버 전용 (`/internal`, JWT 없음)**
 
 | 기능 | 흐름 |
 |------|------|
 | 위험도 업데이트 | AI서버 → 백엔드 → Firestore `realtime_data` 저장 |
-| 낙상 감지 저장 | Firestore 저장 → fall=true: "낙상 감지 경보" / score≥76: "위험 수준 감지" / score≥51: "주의 수준 감지" FCM 푸시 |
+| 낙상 감지 저장 | Firestore 저장 → fall=true: "낙상 감지 경보" / score>75: "위험 수준 감지" / score>50: "주의 수준 감지" FCM 푸시 (경계값 제외, 2026-06-24 수정) |
 | 프레임 전달 | AI서버 JPEG → Base64 인코딩 → Redis Pub/Sub → WebSocket 클라이언트 |
 
 ### 낙상 감지 전체 흐름
@@ -78,8 +78,9 @@ AI 서버 (카메라 분석)
   │
   └─ POST /internal/fall-log → Firestore 이력 저장
                              → fall=true            → "낙상 감지 경보" FCM 푸시
-                             → fall=false, score≥76 → "위험 수준 감지" FCM 푸시
-                             → score≥51             → "주의 수준 감지" FCM 푸시
+                             → fall=false, score>75 → "위험 수준 감지" FCM 푸시
+                             → score>50             → "주의 수준 감지" FCM 푸시
+                             (경계값 제외 — 2026-06-24 수정, 50.0/75.0은 정상/주의 경계에 포함되지 않음)
 ```
 
 ### 데이터 모델 (Firestore)
@@ -398,9 +399,10 @@ Firestore devices 컬렉션에서 user_id == userId 인 기기 목록 반환
 ```
 1. Firestore fall_logs에서 userId 기준 최신 100건 조회
 2. level 파라미터로 필터링 가능
-   - "위험": score >= 76
-   - "주의": score 51~75
+   - "위험": score > 75
+   - "주의": 50 < score <= 75
    - 파라미터 없음: 전체
+   (2026-06-24 수정 — 경계값 50.0/75.0 제외)
 ```
 
 #### 이력 상세 조회 `GET /api/fall-logs/{userId}/{logId}`
@@ -463,11 +465,11 @@ AI 서버 → 백엔드
 
 1. Firestore fall_logs에 이력 저장
 
-2. 알림 발송 조건 판단:
+2. 알림 발송 조건 판단 (2026-06-24 수정 — 경계값 제외):
    - fall=true              → "낙상 감지 경보" FCM 푸시
-   - fall=false, score >= 76 → "위험 수준 감지" FCM 푸시
-   - score >= 51            → "주의 수준 감지" FCM 푸시
-   - score < 51             → 알림 없음
+   - fall=false, score > 75 → "위험 수준 감지" FCM 푸시
+   - score > 50             → "주의 수준 감지" FCM 푸시
+   - score <= 50            → 알림 없음
 
    ※ fall(AI 낙상 판단)과 score(위험도 점수)는 독립 조건으로, 낙상 미판정이어도 점수가 76 이상이면 별도 알림 발송
 
@@ -562,7 +564,7 @@ Python AI 서버 (영상 분석 + 모델 추론)
 | score | Float | 위험도 점수 |
 | fall | Boolean | 낙상 감지 여부 |
 | isConfirmed | Boolean | 사용자 확인 여부 |
-| imageUrl | String? | GCS 썸네일 경로 |
+| imageUrl | String? | GCS 썸네일 경로 — ⚠️ 2026-07-13 기준 Python이 항상 null로 전송(WebSocket 전환 이후 JPEG 미보유), `feature/fall-log-mp4-storage`에서 동영상 경로 필드로 전환 중 |
 | timestamp | Timestamp | 발생 시각 |
 
 ---
