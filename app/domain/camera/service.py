@@ -10,12 +10,12 @@ from datetime import datetime, timezone
 
 import httpx
 from google.cloud.firestore_v1.base_query import FieldFilter
-from app.ai.buffer import save_score, get_score, check_caution_cooldown
-from app.ai.engine import infer_landmarks_async, WARNING_THRESHOLD, CRITICAL_THRESHOLD
+from app.ai.buffer import save_score, get_score, check_caution_cooldown, check_danger_cooldown, apply_score_floor
+from app.ai.engine import infer_landmarks_async, classify_level, WARNING_THRESHOLD, CRITICAL_THRESHOLD
 from app.core.config import settings
 from app.core.exceptions import not_found
 from app.core.firebase import get_firestore
-from app.core.storage import upload_thumbnail
+from app.core.storage import upload_video
 from app.domain.camera.schemas import (
     StreamResponse, ScoreResponse, StatusResponse,
     CameraUrlResponse,
@@ -34,21 +34,25 @@ async def process_frame(landmarks: list, timestamp: float, user_id: str, device_
     result = await infer_landmarks_async(landmarks, device_id, timestamp)
     if not result["features"]:  # 윈도우 미달 또는 STRIDE 미달
         return StreamResponse(score=0.0, fall=False, level="정상")
-    score: float = result["score"]
+    raw_score: float = result["score"]
     fall: bool = result["fall"]
-    level: str = result["level"]
     features: dict = result["features"]
 
+    # score>75 진입 시 15분간 하락 방지(더 높은 값으로는 갱신 허용) — 스펙 확정, 2026-07-13
+    score = await apply_score_floor(user_id, raw_score, CRITICAL_THRESHOLD)
+    level = classify_level(score)
+
     await save_score(user_id, score, level)
-    await _save_realtime_data(user_id, features, score)
+    await _save_realtime_data(user_id, features, raw_score)  # 분석용 원본 score 보존 (sticky 미적용)
     await _update_realtime(user_id, score, level)
 
     log_id: str | None = None
     if score > CRITICAL_THRESHOLD or fall:
-        log_id = await _save_fall_log(user_id, device_id, score, fall, jpeg_bytes=None)
+        if await check_danger_cooldown(user_id):
+            log_id = await _save_fall_log(user_id, device_id, score, fall, video_bytes=None)
     elif score > WARNING_THRESHOLD:
         if await check_caution_cooldown(user_id):
-            log_id = await _save_fall_log(user_id, device_id, score, fall, jpeg_bytes=None)
+            log_id = await _save_fall_log(user_id, device_id, score, fall, video_bytes=None)
 
     return StreamResponse(score=score, fall=fall, level=level, log_id=log_id)
 
@@ -107,15 +111,15 @@ async def _update_realtime(user_id: str, score: float, level: str) -> None:
         logger.error("/internal/realtime 호출 실패 user_id=%s: %s", user_id, e)
 
 
-async def _save_fall_log(user_id: str, device_id: str, score: float, fall: bool, jpeg_bytes: bytes | None) -> str:
+async def _save_fall_log(user_id: str, device_id: str, score: float, fall: bool, video_bytes: bytes | None) -> str:
     log_id = str(uuid.uuid4())
 
-    image_url: str | None = None
-    if jpeg_bytes is not None:
+    video_url: str | None = None
+    if video_bytes is not None:
         try:
-            image_url = await upload_thumbnail(log_id, jpeg_bytes)
+            video_url = await upload_video(log_id, video_bytes)
         except Exception as e:
-            logger.warning("썸네일 업로드 실패 log_id=%s (fall-log는 계속 저장): %s", log_id, e)
+            logger.warning("동영상 업로드 실패 log_id=%s (fall-log는 계속 저장): %s", log_id, e)
 
     try:
         async with httpx.AsyncClient() as client:
@@ -128,7 +132,7 @@ async def _save_fall_log(user_id: str, device_id: str, score: float, fall: bool,
                     "score": score,
                     "fall": fall,
                     "is_confirmed": False,
-                    "image_url": image_url,  # GCS 경로 or 에뮬레이터 URL
+                    "video_url": video_url,  # GCS 경로 or 에뮬레이터 URL
                 },
                 timeout=3.0,
             )

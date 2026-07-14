@@ -25,10 +25,11 @@ logger = logging.getLogger(__name__)
 _PKL_DIR = Path(__file__).parent.parent.parent / "pkl"
 
 # ── 추론 파라미터 ──────────────────────────────────────────────────────────────
-WINDOW_SIZE        = 30    # 슬라이딩 윈도우 프레임 수
-STRIDE             = 5     # 추론 호출 간격 (프레임)
-WARNING_THRESHOLD  = 50.0  # 주의
-CRITICAL_THRESHOLD = 75.0  # 위험
+WINDOW_SIZE          = 30    # 슬라이딩 윈도우 프레임 수
+STRIDE               = 5     # 추론 호출 간격 (프레임)
+WARNING_THRESHOLD    = 50.0  # 주의
+CRITICAL_THRESHOLD   = 75.0  # 위험
+SCORE_SMOOTH_SECONDS = 2.5   # score 출력 스무딩 구간 (2~3초, 스펙 확정 2026-07-13)
 
 # ── 관절 트리플 / 피처 순서 (학습 파이프라인과 1:1 동일) ──────────────────────
 _JOINT_TRIPLETS = [
@@ -91,6 +92,24 @@ def _get_buffer(device_id: str) -> deque:
     if device_id not in _frame_buffers:
         _frame_buffers[device_id] = deque(maxlen=WINDOW_SIZE)
     return _frame_buffers[device_id]
+
+
+# ── 기기별 score 히스토리 (2~3초 출력 스무딩용, device_id별 인메모리) ────────────
+_score_history: dict[str, deque] = {}
+_SCORE_HISTORY_MAXLEN = 60  # 고fps 환경에서도 SCORE_SMOOTH_SECONDS 구간을 넉넉히 담기 위한 상한
+
+
+def _smooth_score(device_id: str, timestamp: float, instant_score: float) -> float:
+    """윈도우(30프레임=~1초) 평균으로 나온 instant_score를 SCORE_SMOOTH_SECONDS(2.5초) 구간으로 추가 평활화한다.
+    device_id별 (timestamp, score) 이력을 인메모리로 들고, 현재 시각 기준 최근 구간만 평균 낸다."""
+    if device_id not in _score_history:
+        _score_history[device_id] = deque(maxlen=_SCORE_HISTORY_MAXLEN)
+    hist = _score_history[device_id]
+    hist.append((timestamp, instant_score))
+
+    cutoff = timestamp - SCORE_SMOOTH_SECONDS
+    recent = [s for t, s in hist if t >= cutoff]
+    return sum(recent) / len(recent) if recent else instant_score
 
 
 # ── 전처리 Step2 ───────────────────────────────────────────────────────────────
@@ -264,7 +283,8 @@ def _step6_scale(df: pd.DataFrame) -> np.ndarray:
 
 # ── 핵심 추론 함수 (동기, 스레드 풀에서 실행) ──────────────────────────────────
 
-def _classify_level(score: float) -> str:
+def classify_level(score: float) -> str:
+    """score → 정상/주의/위험. service.py도 sticky score 재분류에 이 함수를 재사용한다."""
     if score > CRITICAL_THRESHOLD:
         return "위험"
     if score > WARNING_THRESHOLD:
@@ -274,8 +294,12 @@ def _classify_level(score: float) -> str:
 
 def infer_landmarks(landmarks: list, device_id: str, timestamp: float) -> dict:
     """
-    landmark JSON → 30프레임 윈도우 → XGBoost → {"score": float, "fall": bool, "level": str, "features": dict}
+    landmark JSON → 30프레임 윈도우 → XGBoost → 2~3초 구간 평활화
+    → {"score": float, "fall": bool, "level": str, "features": dict}
     윈도우 미달 / STRIDE 미달 시 → {"score": 0.0, "fall": False, "level": "정상", "features": {}}
+
+    반환 score는 30프레임(~1초) 윈도우 평균(instant_score)을 다시
+    SCORE_SMOOTH_SECONDS(2.5초) 구간으로 평활화한 값이다 (스펙 확정, 2026-07-13).
     """
     if len(landmarks) != 33:
         return {"score": 0.0, "fall": False, "level": "정상", "features": {}}
@@ -308,10 +332,11 @@ def infer_landmarks(landmarks: list, device_id: str, timestamp: float) -> dict:
         df_win = _step5_make_features(df_win)
         X      = _step6_scale(df_win)
 
-        proba = _model.predict_proba(X)          # shape (30, 2)
-        score = float(proba[:, 1].mean() * 100)  # 30프레임 평균
+        proba = _model.predict_proba(X)                     # shape (30, 2)
+        instant_score = float(proba[:, 1].mean() * 100)     # 30프레임(~1초) 평균
+        score = _smooth_score(device_id, timestamp, instant_score)  # 2~3초 구간 추가 평활화
         fall  = bool(score > CRITICAL_THRESHOLD)
-        level = _classify_level(score)
+        level = classify_level(score)
         feats = df_win[FEATURE_COLUMNS].iloc[-1].to_dict()
         return {"score": score, "fall": fall, "level": level, "features": feats}
     except Exception as e:
