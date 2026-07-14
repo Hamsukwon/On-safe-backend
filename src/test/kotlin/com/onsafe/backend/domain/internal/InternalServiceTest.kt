@@ -35,7 +35,7 @@ class InternalServiceTest {
         score = 90f,
         fall = true,
         isConfirmed = false,
-        imageUrl = null
+        videoUrl = null
     )
 
     @BeforeEach
@@ -74,7 +74,7 @@ class InternalServiceTest {
     }
 
     @Test
-    fun `위험 점수(76 이상, fall=false) 시 위험 수준 알림 발송`() = runTest {
+    fun `위험 점수(75 초과, fall=false) 시 위험 수준 알림 발송`() = runTest {
         val notifSlot = slot<NotificationRequest>()
         coEvery { fallLogRepository.save(any()) } answers { firstArg() }
         coEvery { notificationService.sendNotification(capture(notifSlot)) } returns mockk(relaxed = true)
@@ -85,7 +85,7 @@ class InternalServiceTest {
     }
 
     @Test
-    fun `주의 점수(51~75) 시 주의 수준 알림 발송`() = runTest {
+    fun `주의 점수(50 초과 75 이하) 시 주의 수준 알림 발송`() = runTest {
         val notifSlot = slot<NotificationRequest>()
         coEvery { fallLogRepository.save(any()) } answers { firstArg() }
         coEvery { notificationService.sendNotification(capture(notifSlot)) } returns mockk(relaxed = true)

@@ -9,6 +9,7 @@ data class FallLog(
     val score: Float,
     val fall: Boolean,
     val isConfirmed: Boolean = false,
-    val imageUrl: String? = null,
+    val videoUrl: String? = null,
+    val lastReminderAt: LocalDateTime? = null,  // 미확인 위험 이벤트 에스컬레이션 리마인더 마지막 발송 시각
     val timestamp: LocalDateTime = LocalDateTime.now()
 )
