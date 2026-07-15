@@ -3,7 +3,6 @@ Redis 기반 AI 추론 지원 버퍼
 
 Redis 키 역할:
   score:{user_id}        TTL 30s    최신 위험 점수 캐시 (GET /score 엔드포인트용)
-  frame:{device_id}      TTL  5s    최신 JPEG 프레임 — 보호자 릴레이 방식 결정 전까지 미사용
   caution_cd:{user_id}   TTL 300s   WARNING 중복 방지 쿨다운
   danger_cd:{user_id}    TTL 21600s CRITICAL(위험)·fall 이벤트 중복 방지 쿨다운 (6시간)
   score_floor:{user_id}  TTL 900s   CRITICAL 진입 시 점수 하락 방지용 최고값 유지 (15분, sticky)
@@ -15,7 +14,6 @@ from redis.asyncio import Redis
 from app.core.config import settings
 
 _redis: Redis | None = None
-_redis_bytes: Redis | None = None
 
 
 def get_redis() -> Redis:
@@ -23,13 +21,6 @@ def get_redis() -> Redis:
     if _redis is None:
         _redis = Redis.from_url(settings.redis_url, decode_responses=True)
     return _redis
-
-
-def get_redis_bytes() -> Redis:
-    global _redis_bytes
-    if _redis_bytes is None:
-        _redis_bytes = Redis.from_url(settings.redis_url, decode_responses=False)
-    return _redis_bytes
 
 
 async def save_score(user_id: str, score: float, level: str) -> None:
@@ -45,17 +36,6 @@ async def get_score(user_id: str) -> dict | None:
     r = get_redis()
     val = await r.get(f"score:{user_id}")
     return json.loads(val) if val else None
-
-
-# 보호자 릴레이 방식 결정 전까지 미사용 — Option A(JPEG 이중스트림) 선택 시 재활성화
-async def save_latest_frame(device_id: str, jpeg_bytes: bytes) -> None:
-    r = get_redis_bytes()
-    await r.set(f"frame:{device_id}", jpeg_bytes, ex=5)
-
-
-async def get_latest_frame(device_id: str) -> bytes | None:
-    r = get_redis_bytes()
-    return await r.get(f"frame:{device_id}")
 
 
 async def check_caution_cooldown(user_id: str, ttl_seconds: int = 300) -> bool:
