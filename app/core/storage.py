@@ -26,15 +26,3 @@ async def upload_video(log_id: str, video_bytes: bytes) -> str:
     """낙상 감지 시점 MP4 클립을 Firebase Storage에 업로드하고 GCS 경로를 반환."""
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(None, _upload_video_sync, log_id, video_bytes)
-
-
-# ── AWS S3 마이그레이션 시 교체할 구현 예시 ────────────────────────────────
-# import boto3
-# _s3 = boto3.client("s3")
-# async def upload_video(log_id: str, video_bytes: bytes) -> str:
-#     loop = asyncio.get_event_loop()
-#     def _upload():
-#         _s3.put_object(Bucket="onsafe-bucket", Key=f"fall-videos/{log_id}.mp4",
-#                        Body=video_bytes, ContentType="video/mp4")
-#         return f"fall-videos/{log_id}.mp4"
-#     return await loop.run_in_executor(None, _upload)
