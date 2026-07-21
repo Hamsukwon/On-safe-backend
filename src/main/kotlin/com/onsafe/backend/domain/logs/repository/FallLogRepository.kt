@@ -62,6 +62,12 @@ class FallLogRepository(private val firestore: Firestore) {
         return 1L
     }
 
+    suspend fun deleteByUserId(userId: String): Long {
+        val docs = col.whereEqualTo("user_id", userId).get().await().documents
+        docs.forEach { it.reference.delete().await() }
+        return docs.size.toLong()
+    }
+
     private suspend fun getDocIfOwned(logId: String, userId: String): DocumentSnapshot? {
         val doc = col.document(logId).get().await()
         return if (doc.exists() && doc.getString("user_id") == userId) doc else null
