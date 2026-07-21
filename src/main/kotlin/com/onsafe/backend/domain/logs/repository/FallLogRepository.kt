@@ -3,6 +3,7 @@ package com.onsafe.backend.domain.logs.repository
 import com.google.cloud.firestore.DocumentSnapshot
 import com.google.cloud.firestore.Firestore
 import com.google.cloud.firestore.Query
+import com.onsafe.backend.common.security.EncryptionService
 import com.onsafe.backend.common.util.await
 import com.onsafe.backend.common.util.toLocalDateTime
 import com.onsafe.backend.common.util.toTimestamp
@@ -13,7 +14,10 @@ import java.time.Duration
 import java.time.LocalDateTime
 
 @Repository
-class FallLogRepository(private val firestore: Firestore) {
+class FallLogRepository(
+    private val firestore: Firestore,
+    private val encryptionService: EncryptionService
+) {
 
     private val col get() = firestore.collection("fall_logs")
 
@@ -59,7 +63,7 @@ class FallLogRepository(private val firestore: Firestore) {
 
     suspend fun setVideoUrlByLogIdAndUserId(logId: String, userId: String, videoUrl: String): FallLog? {
         val doc = getDocIfOwned(logId, userId) ?: return null
-        col.document(logId).update("video_url", videoUrl).await()
+        col.document(logId).update("video_url", encryptionService.encrypt(videoUrl)).await()
         return doc.toFallLog().copy(videoUrl = videoUrl)
     }
 
@@ -128,7 +132,7 @@ class FallLogRepository(private val firestore: Firestore) {
         score = getDouble("score")?.toFloat() ?: 0f,
         fall = getBoolean("fall") ?: false,
         isConfirmed = getBoolean("is_confirmed") ?: false,
-        videoUrl = getString("video_url"),
+        videoUrl = getString("video_url")?.let { encryptionService.decrypt(it) },
         lastReminderAt = getTimestamp("last_reminder_at")?.toLocalDateTime(),
         timestamp = getTimestamp("timestamp")?.toLocalDateTime() ?: LocalDateTime.now()
     )
@@ -139,7 +143,7 @@ class FallLogRepository(private val firestore: Firestore) {
         "score" to score,
         "fall" to fall,
         "is_confirmed" to isConfirmed,
-        "video_url" to videoUrl,
+        "video_url" to videoUrl?.let { encryptionService.encrypt(it) },
         "last_reminder_at" to lastReminderAt?.toTimestamp(),
         "timestamp" to timestamp.toTimestamp()
     )
