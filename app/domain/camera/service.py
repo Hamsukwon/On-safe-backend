@@ -44,9 +44,9 @@ async def process_frame(landmarks: list, timestamp: float, user_id: str, device_
     await _update_realtime(user_id, score, level)
 
     log_id: str | None = None
-    if score >= 76 or fall:
+    if score > 75.0 or fall:
         log_id = await _save_fall_log(user_id, device_id, score, fall, jpeg_bytes=None)
-    elif score >= 51:
+    elif score > 50.0:
         if await check_caution_cooldown(user_id):
             log_id = await _save_fall_log(user_id, device_id, score, fall, jpeg_bytes=None)
 

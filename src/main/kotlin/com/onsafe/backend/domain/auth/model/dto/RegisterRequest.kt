@@ -25,5 +25,7 @@ data class RegisterRequest(
 
     val address: String? = null,
 
-    val addressDetail: String? = null
+    val addressDetail: String? = null,
+
+    val marketingConsent: Boolean = false
 )
