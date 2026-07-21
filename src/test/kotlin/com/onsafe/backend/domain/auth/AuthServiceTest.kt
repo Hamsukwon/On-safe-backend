@@ -8,6 +8,7 @@ import com.onsafe.backend.domain.auth.model.entity.LoginHistory
 import com.onsafe.backend.domain.auth.repository.LoginHistoryRepository
 import com.onsafe.backend.domain.auth.service.AuthService
 import com.onsafe.backend.domain.auth.service.EmailService
+import com.onsafe.backend.domain.settings.repository.SettingsRepository
 import com.onsafe.backend.domain.user.model.entity.User
 import com.onsafe.backend.domain.user.repository.UserRepository
 import io.mockk.coEvery
@@ -34,6 +35,7 @@ class AuthServiceTest {
     private val redis: ReactiveStringRedisTemplate = mockk()
     private val valueOps: ReactiveValueOperations<String, String> = mockk()
     private val loginHistoryRepository: LoginHistoryRepository = mockk()
+    private val settingsRepository: SettingsRepository = mockk()
     private lateinit var authService: AuthService
 
     private val baseUser = User(
@@ -49,7 +51,7 @@ class AuthServiceTest {
     fun setUp() {
         every { redis.opsForValue() } returns valueOps
         coEvery { loginHistoryRepository.save(any()) } answers { firstArg<LoginHistory>() }
-        authService = AuthService(userRepository, passwordEncoder, jwtProvider, emailService, redis, loginHistoryRepository)
+        authService = AuthService(userRepository, passwordEncoder, jwtProvider, emailService, redis, loginHistoryRepository, settingsRepository)
     }
 
     // ── 로그인 ────────────────────────────────────────────────────
