@@ -4,6 +4,8 @@ import com.onsafe.backend.common.exception.BusinessException
 import com.onsafe.backend.common.exception.ErrorCode
 import com.onsafe.backend.common.security.JwtProvider
 import com.onsafe.backend.domain.auth.model.dto.*
+import com.onsafe.backend.domain.auth.model.entity.LoginHistory
+import com.onsafe.backend.domain.auth.repository.LoginHistoryRepository
 import com.onsafe.backend.domain.auth.service.AuthService
 import com.onsafe.backend.domain.auth.service.EmailService
 import com.onsafe.backend.domain.user.model.entity.User
@@ -31,6 +33,7 @@ class AuthServiceTest {
     private val emailService: EmailService = mockk()
     private val redis: ReactiveStringRedisTemplate = mockk()
     private val valueOps: ReactiveValueOperations<String, String> = mockk()
+    private val loginHistoryRepository: LoginHistoryRepository = mockk()
     private lateinit var authService: AuthService
 
     private val baseUser = User(
@@ -45,7 +48,8 @@ class AuthServiceTest {
     @BeforeEach
     fun setUp() {
         every { redis.opsForValue() } returns valueOps
-        authService = AuthService(userRepository, passwordEncoder, jwtProvider, emailService, redis)
+        coEvery { loginHistoryRepository.save(any()) } answers { firstArg<LoginHistory>() }
+        authService = AuthService(userRepository, passwordEncoder, jwtProvider, emailService, redis, loginHistoryRepository)
     }
 
     // ── 로그인 ────────────────────────────────────────────────────
@@ -55,7 +59,7 @@ class AuthServiceTest {
         coEvery { userRepository.findByUserId("unknown") } returns null
 
         val thrown = runCatching {
-            authService.login(LoginRequest(userId = "unknown", password = "pass", deviceId = "device1"))
+            authService.login(LoginRequest(userId = "unknown", password = "pass", deviceId = "device1"), "127.0.0.1", "test-agent")
         }.exceptionOrNull()
 
         assertTrue(thrown is BusinessException)
@@ -68,7 +72,7 @@ class AuthServiceTest {
         every { passwordEncoder.matches("wrongPass", "encoded_password") } returns false
 
         val thrown = runCatching {
-            authService.login(LoginRequest(userId = "testUser", password = "wrongPass", deviceId = "device1"))
+            authService.login(LoginRequest(userId = "testUser", password = "wrongPass", deviceId = "device1"), "127.0.0.1", "test-agent")
         }.exceptionOrNull()
 
         assertTrue(thrown is BusinessException)
