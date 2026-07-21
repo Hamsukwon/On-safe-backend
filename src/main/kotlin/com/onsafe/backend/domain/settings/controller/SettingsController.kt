@@ -3,6 +3,8 @@ package com.onsafe.backend.domain.settings.controller
 import com.onsafe.backend.common.exception.BusinessException
 import com.onsafe.backend.common.exception.ErrorCode
 import com.onsafe.backend.common.response.ApiResponse
+import com.onsafe.backend.domain.settings.model.dto.MarketingConsentRequest
+import com.onsafe.backend.domain.settings.model.dto.MarketingConsentResponse
 import com.onsafe.backend.domain.settings.model.dto.NotificationSettingsRequest
 import com.onsafe.backend.domain.settings.model.dto.NotificationSettingsResponse
 import com.onsafe.backend.domain.settings.model.dto.RetentionSettingsResponse
@@ -48,5 +50,26 @@ class SettingsController(private val settingsService: SettingsService) {
     ): ApiResponse<RetentionSettingsResponse> {
         if (principal != userId) throw BusinessException(ErrorCode.FORBIDDEN)
         return ApiResponse.ok(settingsService.getRetentionSettings(userId))
+    }
+
+    @Operation(summary = "마케팅 수신 동의 조회", security = [SecurityRequirement(name = "BearerAuth")])
+    @GetMapping("/marketing/{userId}")
+    suspend fun getMarketingConsent(
+        @PathVariable userId: String,
+        @AuthenticationPrincipal principal: String
+    ): ApiResponse<MarketingConsentResponse> {
+        if (principal != userId) throw BusinessException(ErrorCode.FORBIDDEN)
+        return ApiResponse.ok(settingsService.getMarketingConsent(userId))
+    }
+
+    @Operation(summary = "마케팅 수신 동의 변경", security = [SecurityRequirement(name = "BearerAuth")])
+    @PutMapping("/marketing/{userId}")
+    suspend fun updateMarketingConsent(
+        @PathVariable userId: String,
+        @Valid @RequestBody request: MarketingConsentRequest,
+        @AuthenticationPrincipal principal: String
+    ): ApiResponse<MarketingConsentResponse> {
+        if (principal != userId) throw BusinessException(ErrorCode.FORBIDDEN)
+        return ApiResponse.ok(settingsService.updateMarketingConsent(userId, request), "마케팅 수신 동의 변경 완료")
     }
 }

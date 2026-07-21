@@ -3,6 +3,8 @@ package com.onsafe.backend.domain.settings.repository
 import com.google.cloud.firestore.DocumentSnapshot
 import com.google.cloud.firestore.Firestore
 import com.onsafe.backend.common.util.await
+import com.onsafe.backend.common.util.toLocalDateTime
+import com.onsafe.backend.common.util.toTimestamp
 import com.onsafe.backend.domain.settings.model.entity.UserSettings
 import org.springframework.stereotype.Repository
 
@@ -30,11 +32,15 @@ class SettingsRepository(private val firestore: Firestore) {
         notificationEnabled = getBoolean("notification_enabled") ?: true,
         soundEnabled = getBoolean("sound_enabled") ?: true,
         vibrationEnabled = getBoolean("vibration_enabled") ?: true,
+        marketingConsent = getBoolean("marketing_consent") ?: false,
+        marketingConsentedAt = getTimestamp("marketing_consented_at")?.toLocalDateTime(),
     )
 
     private fun UserSettings.toMap() = mapOf(
         "notification_enabled" to notificationEnabled,
         "sound_enabled" to soundEnabled,
         "vibration_enabled" to vibrationEnabled,
+        "marketing_consent" to marketingConsent,
+        "marketing_consented_at" to marketingConsentedAt?.toTimestamp(),
     )
 }
