@@ -4,6 +4,8 @@ import com.onsafe.backend.common.exception.BusinessException
 import com.onsafe.backend.common.exception.ErrorCode
 import com.onsafe.backend.common.security.JwtProvider
 import com.onsafe.backend.domain.auth.model.dto.*
+import com.onsafe.backend.domain.auth.model.entity.LoginHistory
+import com.onsafe.backend.domain.auth.repository.LoginHistoryRepository
 import com.onsafe.backend.domain.user.model.entity.User
 import com.onsafe.backend.domain.user.repository.UserRepository
 import kotlinx.coroutines.reactive.awaitFirstOrNull
@@ -23,7 +25,8 @@ class AuthService(
     private val passwordEncoder: PasswordEncoder,
     private val jwtProvider: JwtProvider,
     private val emailService: EmailService,
-    private val redis: ReactiveStringRedisTemplate
+    private val redis: ReactiveStringRedisTemplate,
+    private val loginHistoryRepository: LoginHistoryRepository
 ) {
 
     suspend fun logout(token: String) {
@@ -98,14 +101,19 @@ class AuthService(
         )
     }
 
-    suspend fun login(request: LoginRequest): LoginResponse {
+    suspend fun login(request: LoginRequest, ipAddress: String, userAgent: String): LoginResponse {
         val user = userRepository.findByUserId(request.userId)
-            ?: throw BusinessException(ErrorCode.USER_NOT_FOUND)
+        if (user == null) {
+            recordLoginHistory(request.userId, ipAddress, userAgent, false, ErrorCode.USER_NOT_FOUND.name)
+            throw BusinessException(ErrorCode.USER_NOT_FOUND)
+        }
 
         if (!passwordEncoder.matches(request.password, user.password)) {
+            recordLoginHistory(user.userId, ipAddress, userAgent, false, ErrorCode.INVALID_PASSWORD.name)
             throw BusinessException(ErrorCode.INVALID_PASSWORD)
         }
 
+        recordLoginHistory(user.userId, ipAddress, userAgent, true, null)
         val tokens = issueTokens(user.userId, user.mail)
         return LoginResponse(
             userId = user.userId,
@@ -114,6 +122,27 @@ class AuthService(
             accessToken = tokens.accessToken,
             refreshToken = tokens.refreshToken
         )
+    }
+
+    private suspend fun recordLoginHistory(
+        userId: String,
+        ipAddress: String,
+        userAgent: String,
+        success: Boolean,
+        failReason: String?
+    ) {
+        runCatching {
+            loginHistoryRepository.save(
+                LoginHistory(
+                    historyId = "",
+                    userId = userId,
+                    ipAddress = ipAddress,
+                    userAgent = userAgent,
+                    success = success,
+                    failReason = failReason
+                )
+            )
+        }
     }
 
     suspend fun refresh(refreshToken: String): TokenResponse {

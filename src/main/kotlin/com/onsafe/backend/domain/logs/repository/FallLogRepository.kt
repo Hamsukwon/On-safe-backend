@@ -3,6 +3,7 @@ package com.onsafe.backend.domain.logs.repository
 import com.google.cloud.firestore.DocumentSnapshot
 import com.google.cloud.firestore.Firestore
 import com.google.cloud.firestore.Query
+import com.onsafe.backend.common.security.EncryptionService
 import com.onsafe.backend.common.util.await
 import com.onsafe.backend.common.util.toLocalDateTime
 import com.onsafe.backend.common.util.toTimestamp
@@ -12,7 +13,10 @@ import org.springframework.stereotype.Repository
 import java.time.LocalDateTime
 
 @Repository
-class FallLogRepository(private val firestore: Firestore) {
+class FallLogRepository(
+    private val firestore: Firestore,
+    private val encryptionService: EncryptionService
+) {
 
     private val col get() = firestore.collection("fall_logs")
 
@@ -62,6 +66,12 @@ class FallLogRepository(private val firestore: Firestore) {
         return 1L
     }
 
+    suspend fun deleteByUserId(userId: String): Long {
+        val docs = col.whereEqualTo("user_id", userId).get().await().documents
+        docs.forEach { it.reference.delete().await() }
+        return docs.size.toLong()
+    }
+
     private suspend fun getDocIfOwned(logId: String, userId: String): DocumentSnapshot? {
         val doc = col.document(logId).get().await()
         return if (doc.exists() && doc.getString("user_id") == userId) doc else null
@@ -74,7 +84,7 @@ class FallLogRepository(private val firestore: Firestore) {
         score = getDouble("score")?.toFloat() ?: 0f,
         fall = getBoolean("fall") ?: false,
         isConfirmed = getBoolean("is_confirmed") ?: false,
-        imageUrl = getString("image_url"),
+        imageUrl = getString("image_url")?.let { encryptionService.decrypt(it) },
         timestamp = getTimestamp("timestamp")?.toLocalDateTime() ?: LocalDateTime.now()
     )
 
@@ -84,7 +94,7 @@ class FallLogRepository(private val firestore: Firestore) {
         "score" to score,
         "fall" to fall,
         "is_confirmed" to isConfirmed,
-        "image_url" to imageUrl,
+        "image_url" to imageUrl?.let { encryptionService.encrypt(it) },
         "timestamp" to timestamp.toTimestamp()
     )
 }
