@@ -40,7 +40,7 @@ class InternalService(
                 score = req.score,
                 fall = req.fall,
                 isConfirmed = req.isConfirmed,
-                imageUrl = req.imageUrl
+                videoUrl = req.videoUrl
             )
         )
         val notifData = mapOf("log_id" to req.logId, "user_id" to req.userId, "score" to req.score.toString())

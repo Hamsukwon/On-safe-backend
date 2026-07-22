@@ -5,7 +5,7 @@
         "action": { "type": "Delete" },
         "condition": {
           "age": 30,
-          "matchesPrefix": ["fall-thumbnails/"]
+          "matchesPrefix": ["fall-videos/"]
         }
       }
     ]

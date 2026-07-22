@@ -114,6 +114,22 @@ Storage.SignUrlOption.withV4Signature()
 
 ---
 
+## 운영 시 고려사항 체크
+
+코드 수정 시 아래 항목과 연관되는지 먼저 확인하고 언급한다.
+
+| 수정 대상 | 확인 항목 |
+|-----------|-----------|
+| `/internal/**` 경로 추가·변경 | 외부 접근 가능 여부 — 인프라 레벨 IP 제한 필요 |
+| FCM 전송 로직 수정 | 만료 토큰 자동 정리 누락 여부 |
+| Redis 키 추가 | TTL 설정 여부 (미설정 시 메모리 누수) |
+| GCS·StorageService 수정 | Signed URL TTL(현재 1시간) 영향 여부 |
+| AI 서버(`main.py`) 수정 | pkl 파일·`SPRING_EVENT_URL` 환경변수 의존성 영향 여부 |
+
+세부 판단 기준은 메모리 `project_operational_considerations.md` 참고.
+
+---
+
 ## 커밋 원칙
 
 - **git 커밋·푸시는 유저가 명시적으로 요청할 때만 진행한다.** 파일 수정 후 자동으로 커밋하지 않는다.

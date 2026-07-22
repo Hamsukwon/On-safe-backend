@@ -1,5 +1,5 @@
 import firebase_admin
-from firebase_admin import credentials, firestore_async, messaging
+from firebase_admin import credentials, firestore_async
 from .config import settings
 
 _firebase_app: firebase_admin.App | None = None
@@ -18,12 +18,3 @@ def init_firebase() -> None:
 
 def get_firestore():
     return firestore_async.client()
-
-
-def send_fcm(token: str, title: str, body: str, data: dict | None = None) -> str:
-    msg = messaging.Message(
-        token=token,
-        notification=messaging.Notification(title=title, body=body),
-        data={k: str(v) for k, v in (data or {}).items()},
-    )
-    return messaging.send(msg)

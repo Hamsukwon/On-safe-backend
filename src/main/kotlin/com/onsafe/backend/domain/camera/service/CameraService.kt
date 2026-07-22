@@ -54,8 +54,4 @@ class CameraService(
         if (ownerId != requesterId) throw BusinessException(ErrorCode.FORBIDDEN)
         deviceRepository.updateCameraUrl(deviceId, request.cameraUrl)
     }
-
-    companion object {
-        fun calculateLevel(score: Float) = RiskLevel.fromScore(score).label
-    }
 }

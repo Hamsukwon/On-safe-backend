@@ -7,5 +7,5 @@ data class SaveFallLogRequest(
     val score: Float,
     val fall: Boolean,
     val isConfirmed: Boolean = false,
-    val imageUrl: String? = null
+    val videoUrl: String? = null
 )

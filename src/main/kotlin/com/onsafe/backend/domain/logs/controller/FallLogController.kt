@@ -76,12 +76,12 @@ class FallLogController(private val fallLogService: FallLogService) {
     }
 
     @Operation(
-        summary = "낙상 썸네일 signed URL 조회 (#6)",
-        description = "1시간 유효한 signed URL을 반환합니다. 썸네일이 없으면 404를 반환합니다.",
+        summary = "낙상 동영상 signed URL 조회 (#6)",
+        description = "1시간 유효한 signed URL을 반환합니다. 동영상이 없으면 404를 반환합니다.",
         security = [SecurityRequirement(name = "BearerAuth")]
     )
-    @GetMapping("/{userId}/{logId}/thumbnail")
-    suspend fun getThumbnail(
+    @GetMapping("/{userId}/{logId}/video")
+    suspend fun getVideo(
         @PathVariable userId: String,
         @PathVariable logId: String,
         @AuthenticationPrincipal principal: String
@@ -89,6 +89,39 @@ class FallLogController(private val fallLogService: FallLogService) {
         if (principal != userId) throw BusinessException(ErrorCode.FORBIDDEN)
         val signedUrl = fallLogService.getSignedUrl(userId, logId)
         return ApiResponse.ok(mapOf("signed_url" to signedUrl))
+    }
+
+    @Operation(
+        summary = "낙상 동영상 업로드용 signed URL 발급 (#14)",
+        description = "Android가 GCS에 mp4 클립을 직접 업로드할 수 있도록 10분 유효한 signed PUT URL을 반환합니다. " +
+            "업로드 요청은 반드시 Content-Type: video/mp4 헤더를 포함해야 합니다.",
+        security = [SecurityRequirement(name = "BearerAuth")]
+    )
+    @PostMapping("/{userId}/{logId}/upload-url")
+    suspend fun getUploadUrl(
+        @PathVariable userId: String,
+        @PathVariable logId: String,
+        @AuthenticationPrincipal principal: String
+    ): ApiResponse<Map<String, String>> {
+        if (principal != userId) throw BusinessException(ErrorCode.FORBIDDEN)
+        val uploadUrl = fallLogService.getUploadUrl(userId, logId)
+        return ApiResponse.ok(mapOf("upload_url" to uploadUrl, "content_type" to "video/mp4"))
+    }
+
+    @Operation(
+        summary = "낙상 동영상 업로드 완료 콜백 (#15)",
+        description = "Android가 signed PUT URL로 GCS 업로드를 마친 뒤 호출합니다. " +
+            "GCS에 실제 객체가 존재하는지 서버가 재확인한 뒤에만 video_url을 반영하며, 객체가 없으면 404를 반환합니다.",
+        security = [SecurityRequirement(name = "BearerAuth")]
+    )
+    @PatchMapping("/{userId}/{logId}/video-complete")
+    suspend fun completeVideoUpload(
+        @PathVariable userId: String,
+        @PathVariable logId: String,
+        @AuthenticationPrincipal principal: String
+    ): ApiResponse<FallLogResponse> {
+        if (principal != userId) throw BusinessException(ErrorCode.FORBIDDEN)
+        return ApiResponse.ok(fallLogService.completeVideoUpload(userId, logId), "동영상 업로드가 반영되었습니다.")
     }
 
 }

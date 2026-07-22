@@ -10,7 +10,7 @@ data class FallLogResponse(
     val score: Float,
     val fall: Boolean,
     val isConfirmed: Boolean,
-    val hasThumbnail: Boolean,
+    val hasVideo: Boolean,
     val timestamp: LocalDateTime
 ) {
     companion object {
@@ -21,7 +21,7 @@ data class FallLogResponse(
             score = log.score,
             fall = log.fall,
             isConfirmed = log.isConfirmed,
-            hasThumbnail = log.imageUrl != null,
+            hasVideo = log.videoUrl != null,
             timestamp = log.timestamp
         )
     }

@@ -2,8 +2,8 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
-    // 낙상 썸네일: 백엔드 서비스 계정만 쓰기, 읽기는 공개(make_public() 적용)
-    match /fall-thumbnails/{logId} {
+    // 낙상 동영상: 백엔드 서비스 계정만 쓰기, 읽기는 공개(make_public() 적용)
+    match /fall-videos/{logId} {
       allow read: if true;
       allow write: if false;
     }
