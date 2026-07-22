@@ -48,6 +48,7 @@ async def ws_stream(websocket: WebSocket, token: str = Query(...)):
                     "fall_score": result.score,
                     "fall": result.fall,
                     "level": result.level,
+                    "log_id": result.log_id,
                 })
 
     except WebSocketDisconnect:
