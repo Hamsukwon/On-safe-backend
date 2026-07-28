@@ -7,19 +7,19 @@ AI 기반 노인 낙상 감지 솔루션의 백엔드 서버
 ## 아키텍처 개요
 
 ```
-Android App (사용자 모드)          Android App (보호자 모드)
-    │ landmark JSON                     │ JWT
-    │ WS /ws/stream                     ▼
+Android App
+    │ landmark JSON
+    │ WS /ws/stream
     ▼                          Kotlin Spring 서버 (:8080)
 Python AI 서버 (:8000)  ──────▶    │ Firestore / Redis / FCM
-    │ XGBoost 추론                  │ WS /ws/camera/{userId}
-    │ /internal/realtime             ▼
-    │ /internal/fall-log        Firebase (Firestore·Storage·FCM)
+    │ XGBoost 추론                  ▼
+    │ /internal/realtime        Firebase (Firestore·Storage·FCM)
+    │ /internal/fall-log
     └──────────────────────────▶
 ```
 
 - **Python AI 서버 (FastAPI)**: Android on-device MediaPipe → landmark JSON 수신 → 30프레임 슬라이딩 윈도우 → XGBoost 위험도 추론 → Kotlin internal API 호출
-- **Kotlin Spring 서버 (WebFlux)**: 앱 API 제공, Firestore 저장, FCM 알림, Redis pub/sub 기반 보호자 실시간 스트리밍
+- **Kotlin Spring 서버 (WebFlux)**: 앱 API 제공, Firestore 저장, FCM 알림
 
 ---
 
@@ -30,7 +30,7 @@ Python AI 서버 (:8000)  ──────▶    │ Firestore / Redis / FCM
 | Kotlin 서버 | Spring Boot 3.4, WebFlux, Kotlin Coroutines |
 | Python 서버 | FastAPI, XGBoost, scikit-learn |
 | 데이터베이스 | Firebase Firestore |
-| 캐시·메시징 | Redis (세션 상태, 블랙리스트, pub/sub) |
+| 캐시·메시징 | Redis (블랙리스트, 인증코드 TTL) |
 | 이메일 | AWS SES SDK (SesAsyncClient) |
 | 스토리지 | Firebase Storage (GCS) — 낙상 썸네일 JPEG |
 | 푸시 알림 | Firebase Cloud Messaging (FCM) |
@@ -42,7 +42,6 @@ Python AI 서버 (:8000)  ──────▶    │ Firestore / Redis / FCM
 ## 주요 기능
 
 - **낙상 감지 알림**: AI 추론 점수 기반 위험(≥76)/주의(51~75)/낙상 FCM 알림
-- **실시간 카메라 스트리밍**: WebSocket + Redis pub/sub (`/ws/camera/{userId}`)
 - **이메일 인증**: 회원가입·비밀번호 재설정 6자리 코드 (AWS SES, 3분 TTL)
 - **낙상 이력 관리**: 목록·단건 조회·확인·삭제, 썸네일 Signed URL 발급
 - **설정 관리**: 알림 토글 (전체·소리·진동)
@@ -55,12 +54,12 @@ Python AI 서버 (:8000)  ──────▶    │ Firestore / Redis / FCM
 
 ```
 src/main/kotlin/com/onsafe/backend/
-├── config/          # Firebase, Redis, Security, SES, WebSocket, Swagger
+├── config/          # Firebase, Redis, Security, SES, Swagger
 ├── common/          # 예외처리, 응답 래퍼, JWT, Storage, Firestore 확장
 └── domain/
     ├── auth/        # 로그인·회원가입·이메일인증·비밀번호재설정
-    ├── camera/      # 위험도 조회·URL 관리·세션·WebSocket 스트리밍
-    ├── internal/    # Python AI 서버 수신 API (realtime·fall-log·frame)
+    ├── camera/      # 위험도 조회
+    ├── internal/    # Python AI 서버 수신 API (realtime·fall-log)
     ├── logs/        # 낙상 이력 CRUD·썸네일
     ├── notification/ # FCM 알림 발송 (서비스만 유지, 외부 컨트롤러 제거)
     ├── settings/    # 알림 설정

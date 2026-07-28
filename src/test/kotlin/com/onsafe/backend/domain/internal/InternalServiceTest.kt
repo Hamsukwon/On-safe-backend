@@ -18,14 +18,12 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.springframework.data.redis.core.ReactiveStringRedisTemplate
 
 class InternalServiceTest {
 
     private val realtimeDataRepository: RealtimeDataRepository = mockk(relaxed = true)
     private val fallLogRepository: FallLogRepository = mockk()
     private val notificationService: NotificationService = mockk()
-    private val redisTemplate: ReactiveStringRedisTemplate = mockk(relaxed = true)
     private lateinit var internalService: InternalService
 
     private val baseRequest = SaveFallLogRequest(
@@ -40,7 +38,7 @@ class InternalServiceTest {
 
     @BeforeEach
     fun setUp() {
-        internalService = InternalService(realtimeDataRepository, fallLogRepository, notificationService, redisTemplate)
+        internalService = InternalService(realtimeDataRepository, fallLogRepository, notificationService)
     }
 
     // ── DB 저장 보장 ──────────────────────────────────────────────

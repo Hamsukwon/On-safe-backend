@@ -3,14 +3,12 @@ package com.onsafe.backend.domain.camera.controller
 import com.onsafe.backend.common.exception.BusinessException
 import com.onsafe.backend.common.exception.ErrorCode
 import com.onsafe.backend.common.response.ApiResponse
-import com.onsafe.backend.domain.camera.model.dto.CameraUrlRequest
 import com.onsafe.backend.domain.camera.model.dto.RiskScoreResponse
 import com.onsafe.backend.domain.camera.model.dto.RiskStatusResponse
 import com.onsafe.backend.domain.camera.service.CameraService
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
-import jakarta.validation.Valid
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.web.bind.annotation.*
 
@@ -37,27 +35,5 @@ class CameraController(private val cameraService: CameraService) {
     ): ApiResponse<RiskStatusResponse> {
         if (principal != userId) throw BusinessException(ErrorCode.FORBIDDEN)
         return ApiResponse.ok(cameraService.getRiskStatus(userId))
-    }
-
-    @Operation(summary = "실시간 영상 스트림 URL 조회", security = [SecurityRequirement(name = "BearerAuth")])
-    @GetMapping("/stream/{userId}")
-    suspend fun getStreamUrl(
-        @PathVariable userId: String,
-        @AuthenticationPrincipal principal: String
-    ): ApiResponse<Map<String, String>> {
-        if (principal != userId) throw BusinessException(ErrorCode.FORBIDDEN)
-        val url = cameraService.getCameraUrl(userId)
-        return ApiResponse.ok(mapOf("streamUrl" to url))
-    }
-
-    @Operation(summary = "카메라 URL 등록/수정", security = [SecurityRequirement(name = "BearerAuth")])
-    @PutMapping("/url/{deviceId}")
-    suspend fun updateCameraUrl(
-        @PathVariable deviceId: String,
-        @Valid @RequestBody request: CameraUrlRequest,
-        @AuthenticationPrincipal principal: String
-    ): ApiResponse<Unit> {
-        cameraService.updateCameraUrl(deviceId, request, principal)
-        return ApiResponse.ok(message = "카메라 URL이 업데이트되었습니다.")
     }
 }
