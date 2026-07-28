@@ -6,6 +6,8 @@ import com.onsafe.backend.common.security.JwtProvider
 import com.onsafe.backend.domain.auth.model.dto.*
 import com.onsafe.backend.domain.auth.model.entity.LoginHistory
 import com.onsafe.backend.domain.auth.repository.LoginHistoryRepository
+import com.onsafe.backend.domain.settings.model.entity.UserSettings
+import com.onsafe.backend.domain.settings.repository.SettingsRepository
 import com.onsafe.backend.domain.user.model.entity.User
 import com.onsafe.backend.domain.user.repository.UserRepository
 import kotlinx.coroutines.reactive.awaitFirstOrNull
@@ -26,7 +28,8 @@ class AuthService(
     private val jwtProvider: JwtProvider,
     private val emailService: EmailService,
     private val redis: ReactiveStringRedisTemplate,
-    private val loginHistoryRepository: LoginHistoryRepository
+    private val loginHistoryRepository: LoginHistoryRepository,
+    private val settingsRepository: SettingsRepository
 ) {
 
     suspend fun logout(token: String) {
@@ -97,6 +100,13 @@ class AuthService(
                 mail = request.mail,
                 address = request.address,
                 addressDetail = request.addressDetail
+            )
+        )
+        settingsRepository.save(
+            UserSettings(
+                userId = request.userId,
+                marketingConsent = request.marketingConsent,
+                marketingConsentedAt = if (request.marketingConsent) java.time.LocalDateTime.now() else null,
             )
         )
     }
