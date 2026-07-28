@@ -1,6 +1,8 @@
 package com.onsafe.backend.domain.user
 
 import com.onsafe.backend.common.exception.BusinessException
+import com.onsafe.backend.domain.auth.repository.LoginHistoryRepository
+import com.onsafe.backend.domain.logs.repository.FallLogRepository
 import com.onsafe.backend.domain.settings.repository.SettingsRepository
 import com.onsafe.backend.domain.user.model.dto.UserUpdateRequest
 import com.onsafe.backend.domain.user.model.entity.User
@@ -20,6 +22,8 @@ class UserServiceTest {
 
     private val userRepository: UserRepository = mockk()
     private val settingsRepository: SettingsRepository = mockk()
+    private val fallLogRepository: FallLogRepository = mockk()
+    private val loginHistoryRepository: LoginHistoryRepository = mockk()
     private val passwordEncoder = BCryptPasswordEncoder()
     private lateinit var userService: UserService
 
@@ -36,7 +40,7 @@ class UserServiceTest {
 
     @BeforeEach
     fun setUp() {
-        userService = UserService(userRepository, settingsRepository, passwordEncoder)
+        userService = UserService(userRepository, settingsRepository, passwordEncoder, fallLogRepository, loginHistoryRepository)
     }
 
     @Test

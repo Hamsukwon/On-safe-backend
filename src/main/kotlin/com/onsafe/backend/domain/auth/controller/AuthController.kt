@@ -8,6 +8,7 @@ import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.web.bind.annotation.*
+import org.springframework.web.server.ServerWebExchange
 
 @Tag(name = "Auth", description = "인증 API")
 @RestController
@@ -24,8 +25,15 @@ class AuthController(private val authService: AuthService) {
 
     @Operation(summary = "로그인")
     @PostMapping("/login")
-    suspend fun login(@Valid @RequestBody request: LoginRequest): ApiResponse<LoginResponse> {
-        val response = authService.login(request)
+    suspend fun login(
+        @Valid @RequestBody request: LoginRequest,
+        exchange: ServerWebExchange
+    ): ApiResponse<LoginResponse> {
+        val ipAddress = exchange.request.headers.getFirst("X-Forwarded-For")?.split(",")?.first()?.trim()
+            ?: exchange.request.remoteAddress?.address?.hostAddress
+            ?: "unknown"
+        val userAgent = exchange.request.headers.getFirst("User-Agent") ?: "unknown"
+        val response = authService.login(request, ipAddress, userAgent)
         return ApiResponse.ok(response)
     }
 
