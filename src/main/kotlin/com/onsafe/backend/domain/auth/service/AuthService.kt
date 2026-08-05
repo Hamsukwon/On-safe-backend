@@ -12,6 +12,7 @@ import com.onsafe.backend.domain.user.model.entity.User
 import com.onsafe.backend.domain.user.repository.UserRepository
 import kotlinx.coroutines.reactive.awaitFirstOrNull
 import kotlinx.coroutines.reactor.awaitSingle
+import org.slf4j.LoggerFactory
 import org.springframework.data.redis.core.ReactiveStringRedisTemplate
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
@@ -31,6 +32,8 @@ class AuthService(
     private val loginHistoryRepository: LoginHistoryRepository,
     private val settingsRepository: SettingsRepository
 ) {
+
+    private val log = LoggerFactory.getLogger(javaClass)
 
     suspend fun logout(token: String) {
         val remaining = jwtProvider.getRemainingExpiry(token)
@@ -141,6 +144,8 @@ class AuthService(
         success: Boolean,
         failReason: String?
     ) {
+        // 이력 저장 실패는 로그인 자체를 막지 않되(사용자 경험 우선),
+        // 침입 시도 감지·사후 조사를 위해 실패 사실은 반드시 error 로그로 남긴다.
         runCatching {
             loginHistoryRepository.save(
                 LoginHistory(
@@ -151,6 +156,11 @@ class AuthService(
                     success = success,
                     failReason = failReason
                 )
+            )
+        }.onFailure { e ->
+            log.error(
+                "로그인 이력 저장 실패 — userId={}, success={}, failReason={}, cause={}",
+                userId, success, failReason, e.message, e
             )
         }
     }
