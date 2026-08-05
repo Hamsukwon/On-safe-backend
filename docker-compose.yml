@@ -41,6 +41,7 @@ services:
       FIREBASE_CREDENTIALS: /app/secrets/serviceAccountKey.json
       FIREBASE_STORAGE_BUCKET: ${FIREBASE_STORAGE_BUCKET:?FIREBASE_STORAGE_BUCKET must be set}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      ENCRYPTION_AES_KEY: ${ENCRYPTION_AES_KEY:?ENCRYPTION_AES_KEY must be set (base64-encoded 32 bytes, e.g. openssl rand -base64 32)}
       SPRING_PROFILES_ACTIVE: docker
       AWS_REGION: ${AWS_REGION:-ap-northeast-2}
       SES_FROM_EMAIL: ${SES_FROM_EMAIL:?SES_FROM_EMAIL must be set}
