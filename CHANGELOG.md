@@ -1,5 +1,83 @@
 # Changelog
 
+## [main] - 2026-08-05
+
+### PR #24 — 로그인 이력 저장 실패 시 error 로그 남기기
+
+**변경 파일:** `AuthService.kt`
+
+#### Fixed
+- **`AuthService.recordLoginHistory()`**: `runCatching`으로 저장 시도만 하고 실패 시 완전히 침묵 처리하던 문제 수정 — `.onFailure { }`에서 `userId`/`success`/`failReason`/원인 예외를 SLF4J `error` 로그로 남김 (Firestore 장애·권한 오류 등으로 인한 감사 로그 유실을 사후 조사 가능하게 함). 로그인 자체의 성공 흐름은 그대로 유지
+
+---
+
+### PR #23 — 죽은 카메라 라이브 릴레이(`/ws/camera`) 전체 제거
+
+**변경 파일:** `CameraSessionController/Service/Response/Status`, `CameraStreamWebSocketHandler`, `CameraUrlRequest`, `WebSocketConfig`, `RedisConfig`, `InternalController/Service`, `CameraController/Service`, `DeviceRepository`(파일째 삭제), `ErrorCode`, `JwtAuthenticationFilter`, `README.md`, `v4.0_onsafe_api_spec.md`
+
+#### Removed
+- **카메라 세션 3종 API + WebSocket 중계**: 실시간 JPEG 프레임을 보호자 앱에 중계하던 `/ws/camera`, `CameraSessionController/Service`, `WebSocketConfig`(해당 핸들러만 등록하던 설정이라 파일째 삭제), `RedisConfig`의 프레임 pub/sub 전용 빈 — 이 파이프라인을 공급할 카메라 장치용 producer 자체가 존재한 적이 없는 완전한 죽은 코드였음을 확인 후 삭제
+- **`InternalController/Service.publishFrame`** (`POST /internal/frame/{userId}`)
+- **`CameraController/Service`**: `getStreamUrl`/`updateCameraUrl`(Kotlin 측 카메라 URL 조회·수정) 제거, `getRiskScore`/`getRiskStatus`는 유지
+- **`DeviceRepository.kt`**: PR #22와의 리베이스 과정에서 남은 메서드가 전무해져 파일 자체를 삭제
+- **`ErrorCode.CAMERA_NOT_FOUND`/`DEVICE_NOT_FOUND`**
+
+---
+
+### PR #22 — `/ws/stream` 결과 메시지에 `log_id` 추가, 미사용 Kotlin devices 엔드포인트 제거
+
+**변경 파일:** `app/domain/camera/router.py`, `DeviceController.kt` 및 관련 Kotlin `/api/devices` 구현
+
+#### Added
+- **`WS /ws/stream` 결과 메시지에 `log_id` 필드 추가**: 낙상 로그가 새로 저장된 프레임에서만 값을 채워 Android가 낙상 클립(전후 2분 splice) 트리거로 사용
+
+#### Removed
+- **미사용 Kotlin `/api/devices` 중복 구현** 제거 — Python `app/domain/devices/router.py`가 실제 구현이며 Android는 둘 다 호출하지 않던 죽은 코드였음을 확인
+
+---
+
+### PR #21 — 마케팅 수신 동의 on/off 기능
+
+**변경 파일:** `UserSettings.kt`, `SettingsRepository.kt`, `SettingsService.kt`, `SettingsController.kt`, `MarketingConsentRequest/Response.kt`(신규)
+
+#### Added
+- **`GET/PUT /api/settings/marketing/{userId}`**: 마케팅 수신 동의 조회·변경. `UserSettings`에 `marketingConsent`(기본 false), `marketingConsentedAt` 필드 추가
+
+---
+
+### PR #20 — 개인정보 처리방침 정합화
+
+**변경 파일:** `AuthService.kt`, `LoginHistory.kt`/`LoginHistoryRepository.kt`(신규), `UserService.kt`, `FallLogRepository.kt`, `SettingsRepository.kt`, `EncryptionService.kt`(신규), `gcs-lifecycle.json`
+
+#### Added
+- **로그인 이력 저장** (`LoginHistory`/`LoginHistoryRepository`): 로그인 성공·실패 시도를 `ipAddress`/`userAgent`/`success`/`failReason`과 함께 기록
+- **`video_url` AES-256-GCM 암호화** (`EncryptionService`): `FallLogRepository`의 `toMap()`/`toFallLog()` 경유 읽기·쓰기 모두 암·복호화 적용
+
+#### Changed
+- **회원 탈퇴 시 개인정보 즉시 파기**: `UserService.deleteUser()`가 `fallLogRepository`/`loginHistoryRepository`/`settingsRepository`/`userRepository`를 모두 cascade 삭제하도록 변경
+- **`gcs-lifecycle.json`**: `fall-thumbnails/` → `fall-videos/` 프리픽스로 재타겟팅 (PR #19 mp4 전환 반영), 보관 기간 180일
+
+#### Fixed
+- **`FallLogRepository.setVideoUrlByLogIdAndUserId()` 암호화 우회 버그**: 직접 업로드 완료 콜백(`completeVideoUpload()`)의 실제 쓰기 경로가 `toMap()`을 거치지 않고 Firestore `.update("video_url", ...)`를 직접 호출해 암호화를 우회하던 문제 수정
+
+---
+
+### PR #19 — 낙상 로그 썸네일(JPEG)→동영상(MP4) 저장 전환 + 알림 정책 개선
+
+**변경 파일:** `app/core/storage.py`, `app/ai/buffer.py`, `app/ai/engine.py`, `app/domain/camera/service.py`, `FallLog.kt`, `FallLogRepository.kt`, `FallLogResponse.kt`, `FallLogService.kt`, `FallLogController.kt`, `ErrorCode.kt`, `StorageService.kt`, `FallLogEscalationScheduler.kt`(신규), `FallLogVideoReconciliationJob.kt`(신규), `gcs-lifecycle.json`, `storage.rules`
+
+#### Changed
+- **저장 배관 JPEG→MP4 전환**: 경로(`fall-thumbnails/`→`fall-videos/`), 필드명(`imageUrl`→`videoUrl`), 콘텐츠 타입(`image/jpeg`→`video/mp4`), 엔드포인트(`GET /thumbnail`→`GET /video`) 전부 교체. 실제 영상 캡처·업로드는 Android 측 책임이며 이 PR은 저장 배관만 전환 (`video_bytes`는 항상 `None`)
+- **알림 정책 개선**: 위험(danger) 레벨 6시간 쿨다운 신설(`check_danger_cooldown`), 2.5초 구간 평균 스무딩(`_smooth_score`)으로 정지 직후 점수 하락 역설 완화, 15분 sticky floor(`apply_score_floor`)로 위험 진입 시 점수 하락 방지(상승은 허용)
+
+#### Added
+- **영상 업로드 API 3종**: `POST .../upload-url`(signed PUT, TTL 10분, `Content-Type: video/mp4` 고정) → `PUT`(Android→GCS 직접 업로드) → `PATCH .../video-complete`(서버가 GCS 실물 존재 재확인 후 `video_url` 반영)
+- **`ErrorCode.VIDEO_NOT_ALLOWED`**: 위험(danger) 등급 전용 정책을 API 레벨에서도 강제 — 주의 등급은 업로드 URL 발급 단계에서부터 거부
+- **`FallLogEscalationScheduler`**: 미확인 위험 이벤트 15분 주기 재알림, 사용자당 최신 이벤트만 대상, Firestore 트랜잭션(`claimReminder`)으로 중복 발송 방지
+- **`FallLogVideoReconciliationJob`**: 업로드 완료 콜백이 유실된 로그를 15분 주기로 훑어 GCS 존재 여부 재확인 후 자동 보정
+
+---
+
 ## [main] - 2026-06-03
 
 ### 설정 API 실기기 통합 테스트 완료
