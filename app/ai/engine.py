@@ -29,7 +29,7 @@ WINDOW_SIZE          = 30    # 슬라이딩 윈도우 프레임 수
 STRIDE               = 5     # 추론 호출 간격 (프레임)
 WARNING_THRESHOLD    = 50.0  # 주의
 CRITICAL_THRESHOLD   = 75.0  # 위험
-SCORE_SMOOTH_SECONDS = 2.5   # score 출력 스무딩 구간 (2~3초, 스펙 확정 2026-07-13)
+SCORE_SMOOTH_SECONDS = 2.0   # score 출력 스무딩 구간 (2026-08-05 2.5초→2초 보정)
 
 # ── 관절 트리플 / 피처 순서 (학습 파이프라인과 1:1 동일) ──────────────────────
 _JOINT_TRIPLETS = [
@@ -100,7 +100,7 @@ _SCORE_HISTORY_MAXLEN = 60  # 고fps 환경에서도 SCORE_SMOOTH_SECONDS 구간
 
 
 def _smooth_score(device_id: str, timestamp: float, instant_score: float) -> float:
-    """윈도우(30프레임=~1초) 평균으로 나온 instant_score를 SCORE_SMOOTH_SECONDS(2.5초) 구간으로 추가 평활화한다.
+    """윈도우(30프레임=~1초) 평균으로 나온 instant_score를 SCORE_SMOOTH_SECONDS(2초) 구간으로 추가 평활화한다.
     device_id별 (timestamp, score) 이력을 인메모리로 들고, 현재 시각 기준 최근 구간만 평균 낸다."""
     if device_id not in _score_history:
         _score_history[device_id] = deque(maxlen=_SCORE_HISTORY_MAXLEN)
@@ -294,12 +294,12 @@ def classify_level(score: float) -> str:
 
 def infer_landmarks(landmarks: list, device_id: str, timestamp: float) -> dict:
     """
-    landmark JSON → 30프레임 윈도우 → XGBoost → 2~3초 구간 평활화
+    landmark JSON → 30프레임 윈도우 → XGBoost → 2초 구간 평활화
     → {"score": float, "fall": bool, "level": str, "features": dict}
     윈도우 미달 / STRIDE 미달 시 → {"score": 0.0, "fall": False, "level": "정상", "features": {}}
 
     반환 score는 30프레임(~1초) 윈도우 평균(instant_score)을 다시
-    SCORE_SMOOTH_SECONDS(2.5초) 구간으로 평활화한 값이다 (스펙 확정, 2026-07-13).
+    SCORE_SMOOTH_SECONDS(2초) 구간으로 평활화한 값이다 (2026-08-05 2.5초→2초 보정).
     """
     if len(landmarks) != 33:
         return {"score": 0.0, "fall": False, "level": "정상", "features": {}}
@@ -334,7 +334,7 @@ def infer_landmarks(landmarks: list, device_id: str, timestamp: float) -> dict:
 
         proba = _model.predict_proba(X)                     # shape (30, 2)
         instant_score = float(proba[:, 1].mean() * 100)     # 30프레임(~1초) 평균
-        score = _smooth_score(device_id, timestamp, instant_score)  # 2~3초 구간 추가 평활화
+        score = _smooth_score(device_id, timestamp, instant_score)  # 2초 구간 추가 평활화
         fall  = bool(score > CRITICAL_THRESHOLD)
         level = classify_level(score)
         feats = df_win[FEATURE_COLUMNS].iloc[-1].to_dict()
