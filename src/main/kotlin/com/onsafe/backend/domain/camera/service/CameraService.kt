@@ -2,18 +2,15 @@ package com.onsafe.backend.domain.camera.service
 
 import com.onsafe.backend.common.exception.BusinessException
 import com.onsafe.backend.common.exception.ErrorCode
-import com.onsafe.backend.domain.camera.model.dto.CameraUrlRequest
 import com.onsafe.backend.domain.camera.model.dto.RiskScoreResponse
 import com.onsafe.backend.domain.camera.model.dto.RiskStatusResponse
 import com.onsafe.backend.domain.camera.model.entity.RiskLevel
-import com.onsafe.backend.domain.camera.repository.DeviceRepository
 import com.onsafe.backend.domain.camera.repository.RealtimeDataRepository
 import org.springframework.stereotype.Service
 
 @Service
 class CameraService(
-    private val realtimeDataRepository: RealtimeDataRepository,
-    private val deviceRepository: DeviceRepository
+    private val realtimeDataRepository: RealtimeDataRepository
 ) {
 
     suspend fun getRiskScore(userId: String): RiskScoreResponse {
@@ -38,16 +35,5 @@ class CameraService(
             score = data.score,
             colorCode = risk.colorCode
         )
-    }
-
-    suspend fun getCameraUrl(userId: String): String =
-        deviceRepository.findCameraUrlByUserId(userId)
-            ?: throw BusinessException(ErrorCode.CAMERA_NOT_FOUND)
-
-    suspend fun updateCameraUrl(deviceId: String, request: CameraUrlRequest, requesterId: String) {
-        val ownerId = deviceRepository.findUserIdByDeviceId(deviceId)
-            ?: throw BusinessException(ErrorCode.DEVICE_NOT_FOUND)
-        if (ownerId != requesterId) throw BusinessException(ErrorCode.FORBIDDEN)
-        deviceRepository.updateCameraUrl(deviceId, request.cameraUrl)
     }
 }

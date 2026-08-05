@@ -17,16 +17,12 @@ enum class ErrorCode(
     INVALID_TOKEN(HttpStatus.UNAUTHORIZED, "유효하지 않은 토큰입니다."),
     EXPIRED_TOKEN(HttpStatus.UNAUTHORIZED, "만료된 토큰입니다."),
 
-    // ── 기기 ──────────────────────────────────────────────
-    DEVICE_NOT_FOUND(HttpStatus.NOT_FOUND, "기기를 찾을 수 없습니다."),
-
     // ── 사고 이력 ─────────────────────────────────────────
     LOG_NOT_FOUND(HttpStatus.NOT_FOUND, "사고 이력을 찾을 수 없습니다."),
     VIDEO_NOT_FOUND(HttpStatus.NOT_FOUND, "동영상이 존재하지 않습니다."),
     VIDEO_NOT_ALLOWED(HttpStatus.FORBIDDEN, "주의 등급 이벤트는 동영상을 제공하지 않습니다."),
 
     // ── 카메라 ────────────────────────────────────────────
-    CAMERA_NOT_FOUND(HttpStatus.NOT_FOUND, "카메라 정보를 찾을 수 없습니다."),
     REALTIME_DATA_NOT_FOUND(HttpStatus.NOT_FOUND, "실시간 데이터가 없습니다."),
 
     // ── 아이디 찾기 ───────────────────────────────────────
