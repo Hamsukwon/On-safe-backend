@@ -38,17 +38,31 @@ class SettingsService(
     // 유저 존재 여부를 검증하지 않고 기본값 반환 — 신규 사용자도 설정 화면 진입 가능하도록 의도적으로 생략
     suspend fun getRetentionSettings(userId: String): RetentionSettingsResponse = RetentionSettingsResponse()
 
-    suspend fun getMarketingConsent(userId: String): MarketingConsentResponse =
-        MarketingConsentResponse.from(getOrCreateSettings(userId))
+    suspend fun getMarketingConsent(userId: String): MarketingConsentResponse {
+        val user = userRepository.findByUserId(userId)
+            ?: throw BusinessException(ErrorCode.USER_NOT_FOUND)
+        return MarketingConsentResponse.from(user)
+    }
 
     suspend fun updateMarketingConsent(userId: String, request: MarketingConsentRequest): MarketingConsentResponse {
         val consent = request.consent ?: throw BusinessException(ErrorCode.INVALID_INPUT)
-        val settings = getOrCreateSettings(userId)
-        val updated = settings.copy(
-            marketingConsent = consent,
-            marketingConsentedAt = if (consent) LocalDateTime.now() else null,
-        )
-        return MarketingConsentResponse.from(settingsRepository.save(updated))
+        val user = userRepository.findByUserId(userId)
+            ?: throw BusinessException(ErrorCode.USER_NOT_FOUND)
+        val now = LocalDateTime.now()
+        // 상태 전환 시에만 타임스탬프를 갱신한다 — 같은 값 재전송으로 기록이 지워지지 않도록 함.
+        val updated = when {
+            consent && !user.marketingConsent -> user.copy(
+                marketingConsent = true,
+                marketingConsentAt = now,
+                marketingConsentWithdrawnAt = null,
+            )
+            !consent && user.marketingConsent -> user.copy(
+                marketingConsent = false,
+                marketingConsentWithdrawnAt = now,
+            )
+            else -> user
+        }
+        return MarketingConsentResponse.from(userRepository.save(updated))
     }
 
     private suspend fun getOrCreateSettings(userId: String): UserSettings =

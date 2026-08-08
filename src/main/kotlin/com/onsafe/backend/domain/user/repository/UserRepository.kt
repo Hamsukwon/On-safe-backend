@@ -48,7 +48,10 @@ class UserRepository(private val firestore: Firestore) {
         address = getString("address"),
         addressDetail = getString("address_detail"),
         fcmToken = getString("fcm_token"),
-        createdAt = getTimestamp("created_at")?.toLocalDateTime() ?: LocalDateTime.now()
+        createdAt = getTimestamp("created_at")?.toLocalDateTime() ?: LocalDateTime.now(),
+        marketingConsent = getBoolean("marketing_consent") ?: false,
+        marketingConsentAt = getTimestamp("marketing_consent_at")?.toLocalDateTime(),
+        marketingConsentWithdrawnAt = getTimestamp("marketing_consent_withdrawn_at")?.toLocalDateTime(),
     )
 
     private fun User.toMap() = mapOf(
@@ -59,6 +62,9 @@ class UserRepository(private val firestore: Firestore) {
         "address" to address,
         "address_detail" to addressDetail,
         "fcm_token" to fcmToken,
-        "created_at" to createdAt.toTimestamp()
+        "created_at" to createdAt.toTimestamp(),
+        "marketing_consent" to marketingConsent,
+        "marketing_consent_at" to marketingConsentAt?.toTimestamp(),
+        "marketing_consent_withdrawn_at" to marketingConsentWithdrawnAt?.toTimestamp(),
     )
 }
