@@ -21,6 +21,10 @@ class JwtAuthenticationFilter(
 ) : WebFilter {
 
     override fun filter(exchange: ServerWebExchange, chain: WebFilterChain): Mono<Void> {
+        // 공개 경로(로그인/회원가입/refresh 등)는 클라이언트가 실수로 만료 토큰을 첨부해도
+        // 401로 튕기지 않도록 필터 검증 자체를 건너뛴다. logout/refresh는 자체 헤더 파싱을 사용한다.
+        if (SecurityPaths.isPublic(exchange.request)) return chain.filter(exchange)
+
         val token = extractToken(exchange) ?: return chain.filter(exchange)
 
         val validationError = jwtProvider.getValidationError(token)
