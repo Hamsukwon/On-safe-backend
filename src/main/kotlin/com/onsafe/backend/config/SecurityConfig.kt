@@ -1,6 +1,7 @@
 package com.onsafe.backend.config
 
 import com.onsafe.backend.common.security.JwtAuthenticationFilter
+import com.onsafe.backend.common.security.SecurityPaths
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity
@@ -16,17 +17,6 @@ class SecurityConfig(
     private val jwtAuthenticationFilter: JwtAuthenticationFilter
 ) {
 
-    // 로그인·회원가입 등 토큰 없이 접근 가능한 경로. 나머지는 모두 JWT 필수
-    // /internal/** 은 Python AI 서버 전용 — 로컬 네트워크에서만 호출되므로 JWT 면제
-    private val publicPaths = arrayOf(
-        "/api/auth/**",
-        "/swagger-ui/**",
-        "/swagger-ui.html",
-        "/api-docs/**",
-        "/webjars/**",
-        "/internal/**"
-    )
-
     @Bean
     fun securityFilterChain(http: ServerHttpSecurity): SecurityWebFilterChain {
         return http
@@ -35,7 +25,7 @@ class SecurityConfig(
             .formLogin { it.disable() }  // 폼 로그인 비활성화
             .authorizeExchange { auth ->
                 auth
-                    .pathMatchers(*publicPaths).permitAll()
+                    .pathMatchers(*SecurityPaths.PUBLIC_PATTERNS).permitAll()
                     .anyExchange().authenticated()
             }
             // AUTHENTICATION 단계 직전에 JWT 필터 삽입 → SecurityContext 세팅 후 인가 검사
