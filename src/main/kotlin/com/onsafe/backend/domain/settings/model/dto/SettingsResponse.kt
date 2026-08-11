@@ -1,6 +1,7 @@
 package com.onsafe.backend.domain.settings.model.dto
 
 import com.onsafe.backend.domain.settings.model.entity.UserSettings
+import com.onsafe.backend.domain.user.model.entity.User
 import java.time.LocalDateTime
 
 data class NotificationSettingsResponse(
@@ -21,12 +22,14 @@ data class RetentionSettingsResponse(val retentionDays: Int = 30)
 
 data class MarketingConsentResponse(
     val consent: Boolean,
-    val consentedAt: LocalDateTime?,
+    val consentAt: LocalDateTime?,
+    val withdrawnAt: LocalDateTime?,
 ) {
     companion object {
-        fun from(s: UserSettings) = MarketingConsentResponse(
-            consent = s.marketingConsent,
-            consentedAt = s.marketingConsentedAt,
+        fun from(u: User) = MarketingConsentResponse(
+            consent = u.marketingConsent,
+            consentAt = u.marketingConsentAt,
+            withdrawnAt = u.marketingConsentWithdrawnAt,
         )
     }
 }

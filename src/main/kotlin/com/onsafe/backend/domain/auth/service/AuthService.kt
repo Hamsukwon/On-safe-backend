@@ -94,6 +94,7 @@ class AuthService(
         if (userRepository.existsByMail(request.mail)) {
             throw BusinessException(ErrorCode.MAIL_ALREADY_EXISTS)
         }
+        val now = java.time.LocalDateTime.now()
         userRepository.save(
             User(
                 userId = request.userId,
@@ -102,16 +103,13 @@ class AuthService(
                 phone = request.phone,
                 mail = request.mail,
                 address = request.address,
-                addressDetail = request.addressDetail
-            )
-        )
-        settingsRepository.save(
-            UserSettings(
-                userId = request.userId,
+                addressDetail = request.addressDetail,
                 marketingConsent = request.marketingConsent,
-                marketingConsentedAt = if (request.marketingConsent) java.time.LocalDateTime.now() else null,
+                marketingConsentAt = if (request.marketingConsent) now else null,
+                marketingConsentWithdrawnAt = null,
             )
         )
+        settingsRepository.save(UserSettings(userId = request.userId))
     }
 
     suspend fun login(request: LoginRequest, ipAddress: String, userAgent: String): LoginResponse {
