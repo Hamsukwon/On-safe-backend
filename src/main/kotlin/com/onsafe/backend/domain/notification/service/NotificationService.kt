@@ -1,7 +1,9 @@
 package com.onsafe.backend.domain.notification.service
 
 import com.google.firebase.messaging.FirebaseMessaging
+import com.google.firebase.messaging.FirebaseMessagingException
 import com.google.firebase.messaging.Message
+import com.google.firebase.messaging.MessagingErrorCode
 import com.google.firebase.messaging.Notification
 import com.onsafe.backend.common.exception.BusinessException
 import com.onsafe.backend.common.exception.ErrorCode
@@ -37,6 +39,14 @@ class NotificationService(private val userRepository: UserRepository) {
         return try {
             val messageId = FirebaseMessaging.getInstance().sendAsync(messageBuilder.build()).await()
             NotificationResponse(status = "ok", message = "알림 전송 완료", fcmMessageId = messageId)
+        } catch (e: FirebaseMessagingException) {
+            if (e.messagingErrorCode == MessagingErrorCode.UNREGISTERED) {
+                log.warn("FCM 토큰 만료로 삭제 (userId: ${request.userId})")
+                userRepository.clearFcmToken(request.userId)
+            } else {
+                log.warn("FCM 전송 실패 (userId: ${request.userId}): ${e.message}")
+            }
+            throw BusinessException(ErrorCode.FCM_SEND_FAILED)
         } catch (e: Exception) {
             log.warn("FCM 전송 실패 (userId: ${request.userId}): ${e.message}")
             throw BusinessException(ErrorCode.FCM_SEND_FAILED)

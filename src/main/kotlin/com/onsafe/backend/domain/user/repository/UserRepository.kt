@@ -39,6 +39,10 @@ class UserRepository(private val firestore: Firestore) {
         col.document(userId).delete().await()
     }
 
+    suspend fun clearFcmToken(userId: String) {
+        col.document(userId).update("fcm_token", null).await()
+    }
+
     private fun DocumentSnapshot.toUser() = User(
         userId = id,
         password = getString("password") ?: "",
