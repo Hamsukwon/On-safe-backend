@@ -35,7 +35,14 @@ class AuthService(
 
     private val log = LoggerFactory.getLogger(javaClass)
 
-    suspend fun logout(token: String) {
+    // access token만 블랙리스트하면 refresh token으로 재발급이 계속 가능해 로그아웃의
+    // 보안 효과가 제한적이므로, 두 토큰 모두를 각자 남은 만료 시간만큼 블랙리스트한다.
+    suspend fun logout(accessToken: String?, refreshToken: String?) {
+        if (!accessToken.isNullOrBlank()) blacklistToken(accessToken)
+        if (!refreshToken.isNullOrBlank()) blacklistToken(refreshToken)
+    }
+
+    private suspend fun blacklistToken(token: String) {
         val remaining = jwtProvider.getRemainingExpiry(token)
         if (remaining > java.time.Duration.ZERO) {
             redis.opsForValue().set("bl:$token", "1", remaining).awaitSingle()

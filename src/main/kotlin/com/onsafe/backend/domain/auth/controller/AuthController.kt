@@ -40,10 +40,11 @@ class AuthController(private val authService: AuthService) {
     @Operation(summary = "로그아웃")
     @PostMapping("/logout")
     suspend fun logout(
-        @RequestHeader(value = "Authorization", required = false) authorization: String?
+        @RequestHeader(value = "Authorization", required = false) authorization: String?,
+        @RequestHeader(value = "Refresh-Token", required = false) refreshToken: String?
     ): ApiResponse<Unit> {
-        val token = authorization?.removePrefix("Bearer ")
-        if (!token.isNullOrBlank()) authService.logout(token)
+        val accessToken = authorization?.removePrefix("Bearer ")
+        authService.logout(accessToken, refreshToken)
         return ApiResponse.ok(message = "로그아웃 완료")
     }
 
