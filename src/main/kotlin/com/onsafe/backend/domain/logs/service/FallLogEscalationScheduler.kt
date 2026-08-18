@@ -1,7 +1,6 @@
 package com.onsafe.backend.domain.logs.service
 
 import com.onsafe.backend.domain.logs.repository.FallLogRepository
-import com.onsafe.backend.domain.notification.model.dto.NotificationRequest
 import com.onsafe.backend.domain.notification.service.NotificationService
 import kotlinx.coroutines.runBlocking
 import org.slf4j.LoggerFactory
@@ -53,13 +52,14 @@ class FallLogEscalationScheduler(
                 } ?: continue
 
             runCatching {
-                notificationService.sendNotification(
-                    NotificationRequest(
-                        userId = claimed.userId,
-                        title = "확인이 필요합니다",
-                        body = "이전 위험 알림이 아직 확인되지 않았습니다. 확인해주세요.",
-                        data = mapOf("log_id" to claimed.logId, "user_id" to claimed.userId)
-                    )
+                notificationService.notifyElderAndGuardians(
+                    elderUserId = claimed.userId,
+                    title = "확인이 필요합니다",
+                    body = "이전 위험 알림이 아직 확인되지 않았습니다. 확인해주세요.",
+                    logId = claimed.logId,
+                    score = claimed.score,
+                    fall = claimed.fall,
+                    data = mapOf("log_id" to claimed.logId, "user_id" to claimed.userId)
                 )
             }.onFailure { e ->
                 log.error("에스컬레이션 알림 전송 실패 log_id=${claimed.logId}: ${e.message}", e)

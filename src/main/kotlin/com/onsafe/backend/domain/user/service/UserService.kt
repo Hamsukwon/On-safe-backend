@@ -3,7 +3,9 @@ package com.onsafe.backend.domain.user.service
 import com.onsafe.backend.common.exception.BusinessException
 import com.onsafe.backend.common.exception.ErrorCode
 import com.onsafe.backend.domain.auth.repository.LoginHistoryRepository
+import com.onsafe.backend.domain.guardian.repository.GuardianLinkRepository
 import com.onsafe.backend.domain.logs.repository.FallLogRepository
+import com.onsafe.backend.domain.notification.repository.NotificationRepository
 import com.onsafe.backend.domain.settings.repository.SettingsRepository
 import com.onsafe.backend.domain.user.model.dto.UserResponse
 import com.onsafe.backend.domain.user.model.dto.UserUpdateRequest
@@ -17,7 +19,9 @@ class UserService(
     private val settingsRepository: SettingsRepository,
     private val passwordEncoder: PasswordEncoder,
     private val fallLogRepository: FallLogRepository,
-    private val loginHistoryRepository: LoginHistoryRepository
+    private val loginHistoryRepository: LoginHistoryRepository,
+    private val notificationRepository: NotificationRepository,
+    private val guardianLinkRepository: GuardianLinkRepository
 ) {
 
     suspend fun getUser(userId: String): UserResponse {
@@ -60,6 +64,8 @@ class UserService(
         fallLogRepository.deleteByUserId(userId)
         loginHistoryRepository.deleteByUserId(userId)
         settingsRepository.deleteByUserId(userId)
+        notificationRepository.deleteByUserId(userId)
+        guardianLinkRepository.deleteAllInvolving(userId)
         userRepository.deleteByUserId(userId)
     }
 }
