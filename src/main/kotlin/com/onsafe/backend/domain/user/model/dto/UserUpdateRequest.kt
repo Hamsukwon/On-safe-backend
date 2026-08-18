@@ -8,7 +8,11 @@ data class UserUpdateRequest(
 
     val currentPassword: String? = null,
 
-    @field:Size(min = 4, message = "비밀번호는 4자 이상이어야 합니다.")
+    @field:Size(min = 8, max = 64, message = "비밀번호는 8자 이상 64자 이하여야 합니다.")
+    @field:Pattern(
+        regexp = "^(?=.*[A-Za-z])(?=.*\\d).+$",
+        message = "비밀번호는 영문과 숫자를 모두 포함해야 합니다."
+    )
     val password: String? = null,
 
     val mail: String? = null,
