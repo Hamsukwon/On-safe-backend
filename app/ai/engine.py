@@ -160,9 +160,27 @@ def _step2_resolve_nan(df: pd.DataFrame, conf_threshold: float = 0.3) -> pd.Data
         df[kp_y[j]] = kp[:, j, 1]
         df[kp_z[j]] = kp[:, j, 2]
 
+    # 결측 보간 — cubic 은 유효 표본 4개 이상에서만 안전하고, 표본이 부족하면
+    # scipy 가 "derivatives at boundaries" 예외를 던진다. 표본 수에 따라 linear 로
+    # 강등하고, 그래도 실패하면 안전하게 fallback 한다.
     num_cols = df.select_dtypes(include='number').columns
     for c in num_cols:
-        df[c] = df[c].interpolate(method='cubic', limit_direction='both').ffill().bfill()
+        s = df[c]
+        valid = int(s.notna().sum())
+        if valid >= 4:
+            try:
+                s = s.interpolate(method='cubic', limit_direction='both')
+            except Exception:
+                s = s.interpolate(method='linear', limit_direction='both')
+        elif valid >= 2:
+            s = s.interpolate(method='linear', limit_direction='both')
+        df[c] = s.ffill().bfill()
+
+    # 한 관절이 윈도우 내내 안 보이면(열 전체 NaN) 위 보간으로도 못 채워 잔여 NaN 이 남고,
+    # 이후 savgol·각도계산·scaler 가 "array must not contain infs or NaNs" 로 죽는다.
+    # → 윈도우를 통째로 버려 낙상 감지가 눈머는 것보다, 중립값(0)으로 채워 추론을 지속한다.
+    #   (해당 관절은 정지 상태가 되어 각속도·각가속도가 0 → 오탐을 유발하지 않는다)
+    df[num_cols] = df[num_cols].replace([np.inf, -np.inf], np.nan).fillna(0.0)
     return df
 
 
@@ -292,17 +310,24 @@ def classify_level(score: float) -> str:
     return "정상"
 
 
+def _no_inference(status: str, level: str | None = "정상") -> dict:
+    """추론 결과가 없는 경우(윈도우 미달·STRIDE 미달·landmark 부족·예외)의 공통 반환.
+    status: "warming" / "skip" / "error". error 는 실패를 "정상"으로 단정하지 않도록 level=None."""
+    return {"score": 0.0, "fall": False, "level": level, "features": {}, "status": status}
+
+
 def infer_landmarks(landmarks: list, device_id: str, timestamp: float) -> dict:
     """
     landmark JSON → 30프레임 윈도우 → XGBoost → 2초 구간 평활화
-    → {"score": float, "fall": bool, "level": str, "features": dict}
-    윈도우 미달 / STRIDE 미달 시 → {"score": 0.0, "fall": False, "level": "정상", "features": {}}
+    → {"score": float, "fall": bool, "level": str|None, "features": dict, "status": str}
+    status: "ok"(추론 성공) / "warming"(윈도우 미달) / "skip"(STRIDE 미달·landmark 부족)
+            / "error"(전처리·추론 예외 — level=None, 상위에서 직전값 유지)
 
     반환 score는 30프레임(~1초) 윈도우 평균(instant_score)을 다시
     SCORE_SMOOTH_SECONDS(2초) 구간으로 평활화한 값이다 (2026-08-05 2.5초→2초 보정).
     """
     if len(landmarks) != 33:
-        return {"score": 0.0, "fall": False, "level": "정상", "features": {}}
+        return _no_inference("skip")
 
     # ── landmark JSON → row dict (main.py build_row() 대응) ───────────────
     raw: dict = {}
@@ -319,9 +344,9 @@ def infer_landmarks(landmarks: list, device_id: str, timestamp: float) -> dict:
     _frame_counts[device_id] = _frame_counts.get(device_id, 0) + 1
 
     if len(buf) < WINDOW_SIZE:
-        return {"score": 0.0, "fall": False, "level": "정상", "features": {}}
+        return _no_inference("warming")
     if _frame_counts[device_id] % STRIDE != 0:
-        return {"score": 0.0, "fall": False, "level": "정상", "features": {}}
+        return _no_inference("skip")
 
     # ── 전처리 Step2~6 + XGBoost 추론 ─────────────────────────────────────
     try:
@@ -338,10 +363,11 @@ def infer_landmarks(landmarks: list, device_id: str, timestamp: float) -> dict:
         fall  = bool(score > CRITICAL_THRESHOLD)
         level = classify_level(score)
         feats = df_win[FEATURE_COLUMNS].iloc[-1].to_dict()
-        return {"score": score, "fall": fall, "level": level, "features": feats}
+        return {"score": score, "fall": fall, "level": level, "features": feats, "status": "ok"}
     except Exception as e:
         logger.error("추론 오류 device_id=%s: %s", device_id, e, exc_info=True)
-        return {"score": 0.0, "fall": False, "level": "정상", "features": {}}
+        # 실패를 "정상"으로 단정하지 않는다 — 상위(process_frame)가 status="error"를 보고 직전값을 유지한다.
+        return _no_inference("error", level=None)
 
 
 async def infer_landmarks_async(landmarks: list, device_id: str, timestamp: float) -> dict:

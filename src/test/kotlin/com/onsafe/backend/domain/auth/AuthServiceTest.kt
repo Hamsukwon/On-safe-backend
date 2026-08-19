@@ -2,6 +2,7 @@ package com.onsafe.backend.domain.auth
 
 import com.onsafe.backend.common.exception.BusinessException
 import com.onsafe.backend.common.exception.ErrorCode
+import com.onsafe.backend.common.ratelimit.RateLimiter
 import com.onsafe.backend.common.security.JwtProvider
 import com.onsafe.backend.domain.auth.model.dto.*
 import com.onsafe.backend.domain.auth.model.entity.LoginHistory
@@ -36,6 +37,7 @@ class AuthServiceTest {
     private val valueOps: ReactiveValueOperations<String, String> = mockk()
     private val loginHistoryRepository: LoginHistoryRepository = mockk()
     private val settingsRepository: SettingsRepository = mockk()
+    private val rateLimiter: RateLimiter = mockk()
     private lateinit var authService: AuthService
 
     private val baseUser = User(
@@ -51,7 +53,12 @@ class AuthServiceTest {
     fun setUp() {
         every { redis.opsForValue() } returns valueOps
         coEvery { loginHistoryRepository.save(any()) } answers { firstArg<LoginHistory>() }
-        authService = AuthService(userRepository, passwordEncoder, jwtProvider, emailService, redis, loginHistoryRepository, settingsRepository)
+        // 레이트리밋은 기본 허용 — 리밋 초과 자체를 검증하는 테스트가 아니므로 항상 통과시켜 기존 케이스 로직에 집중한다.
+        coEvery { rateLimiter.allow(any(), any(), any()) } returns true
+        authService = AuthService(
+            userRepository, passwordEncoder, jwtProvider, emailService, redis,
+            loginHistoryRepository, settingsRepository, rateLimiter
+        )
     }
 
     // ── 로그인 ────────────────────────────────────────────────────
