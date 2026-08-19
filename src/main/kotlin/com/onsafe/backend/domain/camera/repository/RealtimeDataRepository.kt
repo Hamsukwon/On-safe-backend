@@ -24,6 +24,11 @@ class RealtimeDataRepository(private val firestore: Firestore) {
         return data
     }
 
+    // 문서 ID가 곧 userId라 단건 delete로 충분(추가 쿼리 불필요).
+    suspend fun deleteByUserId(userId: String) {
+        col.document(userId).delete().await()
+    }
+
     private fun DocumentSnapshot.toRealtimeData() = RealtimeData(
         userId = id,
         score = getDouble("score")?.toFloat() ?: 0f,
