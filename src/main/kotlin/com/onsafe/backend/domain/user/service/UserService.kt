@@ -5,11 +5,16 @@ import com.onsafe.backend.common.exception.ErrorCode
 import com.onsafe.backend.common.storage.StorageService
 import com.onsafe.backend.domain.auth.repository.LoginHistoryRepository
 import com.onsafe.backend.domain.camera.repository.RealtimeDataRepository
+import com.onsafe.backend.domain.guardian.repository.GuardianLinkRepository
 import com.onsafe.backend.domain.logs.repository.FallLogRepository
+import com.onsafe.backend.domain.notification.repository.NotificationRepository
 import com.onsafe.backend.domain.settings.repository.SettingsRepository
 import com.onsafe.backend.domain.user.model.dto.UserResponse
 import com.onsafe.backend.domain.user.model.dto.UserUpdateRequest
 import com.onsafe.backend.domain.user.repository.UserRepository
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import org.slf4j.LoggerFactory
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
@@ -22,7 +27,9 @@ class UserService(
     private val fallLogRepository: FallLogRepository,
     private val loginHistoryRepository: LoginHistoryRepository,
     private val realtimeDataRepository: RealtimeDataRepository,
-    private val storageService: StorageService
+    private val storageService: StorageService,
+    private val notificationRepository: NotificationRepository,
+    private val guardianLinkRepository: GuardianLinkRepository
 ) {
 
     private val log = LoggerFactory.getLogger(javaClass)
@@ -70,19 +77,38 @@ class UserService(
         // blob 삭제 실패는 계정 삭제를 막지 않는다(사용자가 "탈퇴가 안 된다" 상태에 갇히지 않도록) —
         // 개별 실패는 warn 로그로 남겨 사후 파기 재시도가 가능하도록 한다.
         val logIds = fallLogRepository.findLogIdsByUserId(userId)
-        logIds.forEach { logId ->
-            runCatching { storageService.deleteBlob("fall-videos/$logId.mp4") }
-                .onFailure { e ->
-                    log.warn(
-                        "fall-video blob 삭제 실패 — userId={}, logId={}, cause={}",
-                        userId, logId, e.javaClass.simpleName
-                    )
+        // GCS blob 삭제는 개별 GCS SDK 호출이라 서로 독립적 — 병렬로 처리해 blob 개수에 비례해
+        // 탈퇴 응답이 느려지지 않게 한다. 개별 실패는 여전히 warn 로그만 남기고 탈퇴는 계속 진행.
+        coroutineScope {
+            logIds.map { logId ->
+                async {
+                    runCatching { storageService.deleteBlob("fall-videos/$logId.mp4") }
+                        .onFailure { e ->
+                            log.warn(
+                                "fall-video blob 삭제 실패 — userId={}, logId={}, cause={}",
+                                userId, logId, e.javaClass.simpleName
+                            )
+                        }
                 }
+            }.awaitAll()
         }
-        fallLogRepository.deleteByUserId(userId)
-        realtimeDataRepository.deleteByUserId(userId)
-        loginHistoryRepository.deleteByUserId(userId)
-        settingsRepository.deleteByUserId(userId)
+
+        // 아래 6개 삭제는 서로 다른 컬렉션에 대한 독립적인 Firestore 요청이라 병렬로 처리한다.
+        // notifyElderAndGuardians가 피보호자 본인 + 보호자 각각에게 별도 알림 문서를 남기므로,
+        // deleteByUserId(본인 알림)만으로는 부족해 방금 수집한 logIds로 보호자 인박스에 남은
+        // 관련 알림 사본까지 deleteByLogIds로 함께 정리한다.
+        coroutineScope {
+            awaitAll(
+                async { fallLogRepository.deleteByUserId(userId) },
+                async { realtimeDataRepository.deleteByUserId(userId) },
+                async { loginHistoryRepository.deleteByUserId(userId) },
+                async { settingsRepository.deleteByUserId(userId) },
+                async { notificationRepository.deleteByUserId(userId) },
+                async { notificationRepository.deleteByLogIds(logIds) },
+                async { guardianLinkRepository.deleteAllInvolving(userId) }
+            )
+        }
+        // 계정 문서 자체는 위 정리가 전부 끝난 뒤 마지막에 지운다.
         userRepository.deleteByUserId(userId)
     }
 }

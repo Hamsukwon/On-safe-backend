@@ -10,6 +10,7 @@ enum class ErrorCode(
     FORBIDDEN(HttpStatus.FORBIDDEN, "접근 권한이 없습니다."),
     INVALID_INPUT(HttpStatus.BAD_REQUEST, "요청 값이 유효하지 않습니다."),
     TOO_MANY_REQUESTS(HttpStatus.TOO_MANY_REQUESTS, "요청이 너무 많습니다. 잠시 후 다시 시도해주세요."),
+    REDIS_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "일시적으로 요청을 처리할 수 없습니다. 잠시 후 다시 시도해주세요."),
 
     // ── 인증/회원 ──────────────────────────────────────────
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."),
@@ -38,5 +39,14 @@ enum class ErrorCode(
     MAIL_SEND_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "이메일 발송에 실패했습니다."),
 
     // ── 알림 ──────────────────────────────────────────────
-    FCM_SEND_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "알림 전송에 실패했습니다.")
+    FCM_SEND_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "알림 전송에 실패했습니다."),
+
+    // ── 보호자 페어링 ─────────────────────────────────────
+    PAIRING_CODE_INVALID(HttpStatus.BAD_REQUEST, "유효하지 않은 페어링 코드입니다. 코드가 만료되었거나 올바르지 않습니다."),
+    SELF_PAIRING_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "본인 계정은 페어링할 수 없습니다."),
+    PAIRING_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 연결된 계정입니다."),
+    PAIRING_NOT_FOUND(HttpStatus.NOT_FOUND, "연결된 보호자 관계를 찾을 수 없습니다."),
+
+    // ── 알림 목록 ─────────────────────────────────────────
+    NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "알림을 찾을 수 없습니다.")
 }

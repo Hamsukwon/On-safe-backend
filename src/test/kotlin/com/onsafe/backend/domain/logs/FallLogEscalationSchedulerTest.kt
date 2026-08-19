@@ -3,16 +3,16 @@ package com.onsafe.backend.domain.logs
 import com.onsafe.backend.domain.logs.model.entity.FallLog
 import com.onsafe.backend.domain.logs.repository.FallLogRepository
 import com.onsafe.backend.domain.logs.service.FallLogEscalationScheduler
-import com.onsafe.backend.domain.notification.model.dto.NotificationRequest
 import com.onsafe.backend.domain.notification.service.NotificationService
+import io.mockk.Runs
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.just
 import io.mockk.mockk
 import io.mockk.slot
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import java.time.Duration
 import java.time.LocalDateTime
 
 class FallLogEscalationSchedulerTest {
@@ -45,7 +45,11 @@ class FallLogEscalationSchedulerTest {
 
         coEvery { fallLogRepository.findUnconfirmedDangerLogs(any()) } returns listOf(old, recent)
         coEvery { fallLogRepository.claimReminder("recent", any()) } returns recent.copy(lastReminderAt = LocalDateTime.now())
-        coEvery { notificationService.sendNotification(any()) } returns mockk(relaxed = true)
+        coEvery {
+            notificationService.notifyElderAndGuardians(
+                elderUserId = any(), title = any(), body = any(), logId = any(), score = any(), fall = any(), data = any()
+            )
+        } just Runs
 
         scheduler.checkEscalations()
 
@@ -64,7 +68,11 @@ class FallLogEscalationSchedulerTest {
 
         scheduler.checkEscalations()
 
-        coVerify(exactly = 0) { notificationService.sendNotification(any()) }
+        coVerify(exactly = 0) {
+            notificationService.notifyElderAndGuardians(
+                elderUserId = any(), title = any(), body = any(), logId = any(), score = any(), fall = any(), data = any()
+            )
+        }
     }
 
     // ── 클레임 성공 시 올바른 사용자에게 알림 발송 ───────────────────────
@@ -73,16 +81,22 @@ class FallLogEscalationSchedulerTest {
     fun `claimReminder가 성공하면 해당 사용자에게 알림을 보낸다`() {
         val candidate = log("log2", "userC", minutesAgo = 30)
         val claimed = candidate.copy(lastReminderAt = LocalDateTime.now())
-        val notifSlot = slot<NotificationRequest>()
+        val elderIdSlot = slot<String>()
+        val logIdSlot = slot<String>()
 
         coEvery { fallLogRepository.findUnconfirmedDangerLogs(any()) } returns listOf(candidate)
         coEvery { fallLogRepository.claimReminder("log2", any()) } returns claimed
-        coEvery { notificationService.sendNotification(capture(notifSlot)) } returns mockk(relaxed = true)
+        coEvery {
+            notificationService.notifyElderAndGuardians(
+                elderUserId = capture(elderIdSlot), title = any(), body = any(),
+                logId = capture(logIdSlot), score = any(), fall = any(), data = any()
+            )
+        } just Runs
 
         scheduler.checkEscalations()
 
-        assertEquals("userC", notifSlot.captured.userId)
-        assertEquals("log2", notifSlot.captured.data?.get("log_id"))
+        assertEquals("userC", elderIdSlot.captured)
+        assertEquals("log2", logIdSlot.captured)
     }
 
     // ── 여러 사용자는 독립적으로 처리 ────────────────────────────────
@@ -97,7 +111,11 @@ class FallLogEscalationSchedulerTest {
             userA.copy(lastReminderAt = LocalDateTime.now()),
             userB.copy(lastReminderAt = LocalDateTime.now())
         )
-        coEvery { notificationService.sendNotification(any()) } returns mockk(relaxed = true)
+        coEvery {
+            notificationService.notifyElderAndGuardians(
+                elderUserId = any(), title = any(), body = any(), logId = any(), score = any(), fall = any(), data = any()
+            )
+        } just Runs
 
         scheduler.checkEscalations()
 

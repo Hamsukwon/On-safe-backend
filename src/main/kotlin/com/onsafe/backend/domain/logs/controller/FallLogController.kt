@@ -3,6 +3,7 @@ package com.onsafe.backend.domain.logs.controller
 import com.onsafe.backend.common.exception.BusinessException
 import com.onsafe.backend.common.exception.ErrorCode
 import com.onsafe.backend.common.response.ApiResponse
+import com.onsafe.backend.domain.guardian.repository.GuardianLinkRepository
 import com.onsafe.backend.domain.logs.model.dto.FallLogResponse
 import com.onsafe.backend.domain.logs.service.FallLogService
 import io.swagger.v3.oas.annotations.Operation
@@ -14,11 +15,22 @@ import org.springframework.web.bind.annotation.*
 @Tag(name = "FallLogs", description = "낙상 로그 API")
 @RestController
 @RequestMapping("/api/fall-logs")
-class FallLogController(private val fallLogService: FallLogService) {
+class FallLogController(
+    private val fallLogService: FallLogService,
+    private val guardianLinkRepository: GuardianLinkRepository
+) {
+
+    // 조회·확인 처리는 본인 또는 guardian_links로 연결된 보호자까지 허용한다.
+    // 삭제·영상 업로드는 카메라 기기를 쥔 본인 계정만 가능해야 하므로 이 헬퍼를 쓰지 않는다.
+    private suspend fun requireOwnerOrGuardian(principal: String, userId: String) {
+        if (principal == userId) return
+        if (guardianLinkRepository.exists(principal, userId)) return
+        throw BusinessException(ErrorCode.FORBIDDEN)
+    }
 
     @Operation(
         summary = "낙상 로그 목록 조회",
-        description = "level 파라미터로 필터링 가능. 값: 위험 | 주의 (생략 시 전체)",
+        description = "level 파라미터로 필터링 가능. 값: 위험 | 주의 (생략 시 전체). 본인 또는 연결된 보호자만 조회 가능.",
         security = [SecurityRequirement(name = "BearerAuth")]
     )
     @GetMapping("/{userId}")
@@ -27,7 +39,7 @@ class FallLogController(private val fallLogService: FallLogService) {
         @AuthenticationPrincipal principal: String,
         @RequestParam(required = false) level: String?
     ): ApiResponse<Map<String, List<FallLogResponse>>> {
-        if (principal != userId) throw BusinessException(ErrorCode.FORBIDDEN)
+        requireOwnerOrGuardian(principal, userId)
         return ApiResponse.ok(mapOf("logs" to fallLogService.getLogs(userId, level)))
     }
 
@@ -37,7 +49,7 @@ class FallLogController(private val fallLogService: FallLogService) {
         @PathVariable userId: String,
         @AuthenticationPrincipal principal: String
     ): ApiResponse<Map<String, Int>> {
-        if (principal != userId) throw BusinessException(ErrorCode.FORBIDDEN)
+        requireOwnerOrGuardian(principal, userId)
         return ApiResponse.ok(fallLogService.getLogCounts(userId))
     }
 
@@ -48,18 +60,22 @@ class FallLogController(private val fallLogService: FallLogService) {
         @PathVariable logId: String,
         @AuthenticationPrincipal principal: String
     ): ApiResponse<FallLogResponse> {
-        if (principal != userId) throw BusinessException(ErrorCode.FORBIDDEN)
+        requireOwnerOrGuardian(principal, userId)
         return ApiResponse.ok(fallLogService.getLog(userId, logId))
     }
 
-    @Operation(summary = "낙상 이벤트 확인 처리", security = [SecurityRequirement(name = "BearerAuth")])
+    @Operation(
+        summary = "낙상 이벤트 확인 처리",
+        description = "본인 또는 연결된 보호자가 확인 처리할 수 있습니다 — 피보호자가 응답 불가한 상황을 위해 보호자에게도 허용합니다.",
+        security = [SecurityRequirement(name = "BearerAuth")]
+    )
     @PatchMapping("/{userId}/{logId}/confirm")
     suspend fun confirmLog(
         @PathVariable userId: String,
         @PathVariable logId: String,
         @AuthenticationPrincipal principal: String
     ): ApiResponse<FallLogResponse> {
-        if (principal != userId) throw BusinessException(ErrorCode.FORBIDDEN)
+        requireOwnerOrGuardian(principal, userId)
         return ApiResponse.ok(fallLogService.confirmLog(userId, logId), "낙상 이벤트를 확인 처리했습니다.")
     }
 
@@ -77,7 +93,7 @@ class FallLogController(private val fallLogService: FallLogService) {
 
     @Operation(
         summary = "낙상 동영상 signed URL 조회 (#6)",
-        description = "1시간 유효한 signed URL을 반환합니다. 동영상이 없으면 404를 반환합니다.",
+        description = "1시간 유효한 signed URL을 반환합니다. 동영상이 없으면 404를 반환합니다. 본인 또는 연결된 보호자만 조회 가능.",
         security = [SecurityRequirement(name = "BearerAuth")]
     )
     @GetMapping("/{userId}/{logId}/video")
@@ -86,7 +102,7 @@ class FallLogController(private val fallLogService: FallLogService) {
         @PathVariable logId: String,
         @AuthenticationPrincipal principal: String
     ): ApiResponse<Map<String, String>> {
-        if (principal != userId) throw BusinessException(ErrorCode.FORBIDDEN)
+        requireOwnerOrGuardian(principal, userId)
         val signedUrl = fallLogService.getSignedUrl(userId, logId)
         return ApiResponse.ok(mapOf("signed_url" to signedUrl))
     }

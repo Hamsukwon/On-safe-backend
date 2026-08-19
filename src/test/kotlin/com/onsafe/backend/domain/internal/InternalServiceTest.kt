@@ -1,16 +1,15 @@
 package com.onsafe.backend.domain.internal
 
-import com.onsafe.backend.common.exception.BusinessException
-import com.onsafe.backend.common.exception.ErrorCode
 import com.onsafe.backend.domain.camera.repository.RealtimeDataRepository
 import com.onsafe.backend.domain.internal.model.dto.SaveFallLogRequest
 import com.onsafe.backend.domain.internal.service.InternalService
 import com.onsafe.backend.domain.logs.model.entity.FallLog
 import com.onsafe.backend.domain.logs.repository.FallLogRepository
-import com.onsafe.backend.domain.notification.model.dto.NotificationRequest
 import com.onsafe.backend.domain.notification.service.NotificationService
+import io.mockk.Runs
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.just
 import io.mockk.mockk
 import io.mockk.slot
 import kotlinx.coroutines.test.runTest
@@ -47,9 +46,13 @@ class InternalServiceTest {
     fun `FCM 전송 실패해도 DB 저장은 완료된다`() = runTest {
         val savedSlot = slot<FallLog>()
         coEvery { fallLogRepository.save(capture(savedSlot)) } answers { firstArg() }
-        coEvery { notificationService.sendNotification(any()) } throws BusinessException(ErrorCode.FCM_SEND_FAILED)
+        coEvery {
+            notificationService.notifyElderAndGuardians(
+                elderUserId = any(), title = any(), body = any(), logId = any(), score = any(), fall = any(), data = any()
+            )
+        } throws RuntimeException("FCM_SEND_FAILED")
 
-        // 예외 없이 정상 종료되어야 함
+        // notifySafe가 내부에서 runCatching으로 감싸므로 예외 없이 정상 종료되어야 함
         internalService.saveFallLog(baseRequest)
 
         assertEquals("log001", savedSlot.captured.logId)
@@ -61,36 +64,52 @@ class InternalServiceTest {
 
     @Test
     fun `낙상 감지(fall=true) 시 낙상 경보 알림 발송`() = runTest {
-        val notifSlot = slot<NotificationRequest>()
+        val titleSlot = slot<String>()
+        val elderIdSlot = slot<String>()
         coEvery { fallLogRepository.save(any()) } answers { firstArg() }
-        coEvery { notificationService.sendNotification(capture(notifSlot)) } returns mockk(relaxed = true)
+        coEvery {
+            notificationService.notifyElderAndGuardians(
+                elderUserId = capture(elderIdSlot), title = capture(titleSlot),
+                body = any(), logId = any(), score = any(), fall = any(), data = any()
+            )
+        } just Runs
 
         internalService.saveFallLog(baseRequest.copy(fall = true, score = 50f))
 
-        assertEquals("낙상 감지 경보", notifSlot.captured.title)
-        assertEquals("testUser", notifSlot.captured.userId)
+        assertEquals("낙상 감지 경보", titleSlot.captured)
+        assertEquals("testUser", elderIdSlot.captured)
     }
 
     @Test
     fun `위험 점수(75 초과, fall=false) 시 위험 수준 알림 발송`() = runTest {
-        val notifSlot = slot<NotificationRequest>()
+        val titleSlot = slot<String>()
         coEvery { fallLogRepository.save(any()) } answers { firstArg() }
-        coEvery { notificationService.sendNotification(capture(notifSlot)) } returns mockk(relaxed = true)
+        coEvery {
+            notificationService.notifyElderAndGuardians(
+                elderUserId = any(), title = capture(titleSlot),
+                body = any(), logId = any(), score = any(), fall = any(), data = any()
+            )
+        } just Runs
 
         internalService.saveFallLog(baseRequest.copy(fall = false, score = 80f))
 
-        assertEquals("위험 수준 감지", notifSlot.captured.title)
+        assertEquals("위험 수준 감지", titleSlot.captured)
     }
 
     @Test
     fun `주의 점수(50 초과 75 이하) 시 주의 수준 알림 발송`() = runTest {
-        val notifSlot = slot<NotificationRequest>()
+        val titleSlot = slot<String>()
         coEvery { fallLogRepository.save(any()) } answers { firstArg() }
-        coEvery { notificationService.sendNotification(capture(notifSlot)) } returns mockk(relaxed = true)
+        coEvery {
+            notificationService.notifyElderAndGuardians(
+                elderUserId = any(), title = capture(titleSlot),
+                body = any(), logId = any(), score = any(), fall = any(), data = any()
+            )
+        } just Runs
 
         internalService.saveFallLog(baseRequest.copy(fall = false, score = 60f))
 
-        assertEquals("주의 수준 감지", notifSlot.captured.title)
+        assertEquals("주의 수준 감지", titleSlot.captured)
     }
 
     @Test
@@ -99,20 +118,28 @@ class InternalServiceTest {
 
         internalService.saveFallLog(baseRequest.copy(fall = false, score = 30f))
 
-        coVerify(exactly = 0) { notificationService.sendNotification(any()) }
+        coVerify(exactly = 0) {
+            notificationService.notifyElderAndGuardians(
+                elderUserId = any(), title = any(), body = any(), logId = any(), score = any(), fall = any(), data = any()
+            )
+        }
     }
 
-    // ── 알림 데이터 검증 ──────────────────────────────────────────
+    // ── 알림 data에 log_id/user_id/score 검증 ─────────────────────
 
     @Test
     fun `알림 data에 log_id, user_id, score가 포함된다`() = runTest {
-        val notifSlot = slot<NotificationRequest>()
+        val dataSlot = slot<Map<String, String>>()
         coEvery { fallLogRepository.save(any()) } answers { firstArg() }
-        coEvery { notificationService.sendNotification(capture(notifSlot)) } returns mockk(relaxed = true)
+        coEvery {
+            notificationService.notifyElderAndGuardians(
+                elderUserId = any(), title = any(), body = any(), logId = any(), score = any(), fall = any(), data = capture(dataSlot)
+            )
+        } just Runs
 
         internalService.saveFallLog(baseRequest)
 
-        val data = notifSlot.captured.data!!
+        val data = dataSlot.captured
         assertEquals("log001", data["log_id"])
         assertEquals("testUser", data["user_id"])
         assertEquals("90.0", data["score"])
@@ -124,7 +151,11 @@ class InternalServiceTest {
     fun `isConfirmed 기본값은 false로 저장된다`() = runTest {
         val savedSlot = slot<FallLog>()
         coEvery { fallLogRepository.save(capture(savedSlot)) } answers { firstArg() }
-        coEvery { notificationService.sendNotification(any()) } returns mockk(relaxed = true)
+        coEvery {
+            notificationService.notifyElderAndGuardians(
+                elderUserId = any(), title = any(), body = any(), logId = any(), score = any(), fall = any(), data = any()
+            )
+        } just Runs
 
         internalService.saveFallLog(baseRequest.copy(isConfirmed = false))
 
