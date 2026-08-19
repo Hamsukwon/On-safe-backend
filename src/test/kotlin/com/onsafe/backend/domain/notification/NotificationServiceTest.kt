@@ -5,7 +5,9 @@ import com.google.firebase.messaging.FirebaseMessaging
 import com.google.firebase.messaging.Message
 import com.onsafe.backend.common.exception.BusinessException
 import com.onsafe.backend.common.exception.ErrorCode
+import com.onsafe.backend.domain.guardian.repository.GuardianLinkRepository
 import com.onsafe.backend.domain.notification.model.dto.NotificationRequest
+import com.onsafe.backend.domain.notification.repository.NotificationRepository
 import com.onsafe.backend.domain.notification.service.NotificationService
 import com.onsafe.backend.domain.user.model.entity.User
 import com.onsafe.backend.domain.user.repository.UserRepository
@@ -25,6 +27,8 @@ import java.time.LocalDateTime
 class NotificationServiceTest {
 
     private val userRepository: UserRepository = mockk()
+    private val notificationRepository: NotificationRepository = mockk()
+    private val guardianLinkRepository: GuardianLinkRepository = mockk()
     private lateinit var notificationService: NotificationService
 
     private val baseUser = User(
@@ -39,7 +43,9 @@ class NotificationServiceTest {
 
     @BeforeEach
     fun setUp() {
-        notificationService = NotificationService(userRepository)
+        // 알림 기록은 FCM 발송 성공/실패와 무관하게 항상 남으므로 기본 저장 스텁만 걸어둔다.
+        coEvery { notificationRepository.save(any()) } answers { firstArg() }
+        notificationService = NotificationService(userRepository, notificationRepository, guardianLinkRepository)
         mockkStatic(FirebaseMessaging::class)
     }
 

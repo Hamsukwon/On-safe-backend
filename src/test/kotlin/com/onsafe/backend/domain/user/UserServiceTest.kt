@@ -4,7 +4,9 @@ import com.onsafe.backend.common.exception.BusinessException
 import com.onsafe.backend.common.storage.StorageService
 import com.onsafe.backend.domain.auth.repository.LoginHistoryRepository
 import com.onsafe.backend.domain.camera.repository.RealtimeDataRepository
+import com.onsafe.backend.domain.guardian.repository.GuardianLinkRepository
 import com.onsafe.backend.domain.logs.repository.FallLogRepository
+import com.onsafe.backend.domain.notification.repository.NotificationRepository
 import com.onsafe.backend.domain.settings.repository.SettingsRepository
 import com.onsafe.backend.domain.user.model.dto.UserUpdateRequest
 import com.onsafe.backend.domain.user.model.entity.User
@@ -28,6 +30,8 @@ class UserServiceTest {
     private val loginHistoryRepository: LoginHistoryRepository = mockk()
     private val realtimeDataRepository: RealtimeDataRepository = mockk()
     private val storageService: StorageService = mockk()
+    private val notificationRepository: NotificationRepository = mockk()
+    private val guardianLinkRepository: GuardianLinkRepository = mockk()
     private val passwordEncoder = BCryptPasswordEncoder()
     private lateinit var userService: UserService
 
@@ -46,7 +50,8 @@ class UserServiceTest {
     fun setUp() {
         userService = UserService(
             userRepository, settingsRepository, passwordEncoder, fallLogRepository,
-            loginHistoryRepository, realtimeDataRepository, storageService
+            loginHistoryRepository, realtimeDataRepository, storageService,
+            notificationRepository, guardianLinkRepository
         )
     }
 
