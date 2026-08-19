@@ -85,8 +85,9 @@ class NotificationService(
 
     /**
      * 피보호자 본인 + 연결된 보호자 전원에게 알림을 보낸다. 발송 대상별로 개별 실패를 격리해
-     * 한 명(예: 만료된 FCM 토큰) 실패가 나머지 수신자 발송을 막지 않게 하고, 보호자 발송은
-     * 서로 독립적이므로 병렬로 처리해 보호자 수에 비례해 지연이 누적되지 않게 한다.
+     * 한 명(예: 만료된 FCM 토큰) 실패가 나머지 수신자 발송을 막지 않게 한다. 본인 발송(FCM 네트워크
+     * 호출 포함)과 보호자 목록 조회·보호자 발송은 서로 데이터 의존이 없어 전부 병렬로 처리해
+     * 보호자 수·본인 발송 지연에 비례해 전체 시간이 늘어나지 않게 한다.
      */
     suspend fun notifyElderAndGuardians(
         elderUserId: String,
@@ -99,23 +100,26 @@ class NotificationService(
     ) {
         val elder = userRepository.findByUserId(elderUserId)
 
-        runCatching {
-            if (elder == null) throw BusinessException(ErrorCode.USER_NOT_FOUND)
-            sendNotification(elder, NotificationRequest(elderUserId, title, body, logId, score, fall, data))
-        }.onFailure { e -> log.warn("알림 전송 실패 (userId: $elderUserId): ${e.message}") }
-
-        val guardianIds = guardianLinkRepository.findGuardiansOf(elderUserId)
-        if (guardianIds.isEmpty()) return
-
-        val elderName = elder?.name ?: elderUserId
         coroutineScope {
-            guardianIds.map { guardianId ->
+            val elderSend = async {
+                runCatching {
+                    if (elder == null) throw BusinessException(ErrorCode.USER_NOT_FOUND)
+                    sendNotification(elder, NotificationRequest(elderUserId, title, body, logId, score, fall, data))
+                }.onFailure { e -> log.warn("알림 전송 실패 (userId: $elderUserId): ${e.message}") }
+            }
+
+            val guardianIds = guardianLinkRepository.findGuardiansOf(elderUserId)
+            val elderName = elder?.name ?: elderUserId
+
+            val guardianSends = guardianIds.map { guardianId ->
                 async {
                     runCatching {
                         sendNotification(NotificationRequest(guardianId, title, "[$elderName] $body", logId, score, fall, data))
                     }.onFailure { e -> log.warn("보호자 알림 전송 실패 (guardianId: $guardianId): ${e.message}") }
                 }
-            }.awaitAll()
+            }
+
+            (listOf(elderSend) + guardianSends).awaitAll()
         }
     }
 

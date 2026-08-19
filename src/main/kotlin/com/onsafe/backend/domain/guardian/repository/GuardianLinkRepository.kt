@@ -3,6 +3,7 @@ package com.onsafe.backend.domain.guardian.repository
 import com.google.cloud.firestore.DocumentSnapshot
 import com.google.cloud.firestore.Firestore
 import com.onsafe.backend.common.util.await
+import com.onsafe.backend.common.util.deleteInBatches
 import com.onsafe.backend.common.util.toLocalDateTime
 import com.onsafe.backend.common.util.toTimestamp
 import com.onsafe.backend.domain.guardian.model.entity.GuardianLink
@@ -51,16 +52,10 @@ class GuardianLinkRepository(private val firestore: Firestore) {
     }
 
     // 계정 탈퇴 시 이 유저가 보호자·피보호자 어느 쪽으로 맺은 관계든 전부 정리한다.
-    // WriteBatch로 묶어 커밋해, 연결된 관계가 많을 때 문서당 별도 왕복이 생기지 않게 한다
-    // (최대 500건/배치라 청크로 나눠 커밋 — 이 정도 규모를 넘는 사용자는 사실상 없음).
     suspend fun deleteAllInvolving(userId: String) {
         val asGuardian = col.whereEqualTo("guardian_user_id", userId).get().await().documents
         val asElder = col.whereEqualTo("elder_user_id", userId).get().await().documents
-        (asGuardian + asElder).map { it.reference }.chunked(500).forEach { chunk ->
-            val batch = firestore.batch()
-            chunk.forEach { batch.delete(it) }
-            batch.commit().await()
-        }
+        firestore.deleteInBatches((asGuardian + asElder).map { it.reference })
     }
 
     private fun DocumentSnapshot.toLink() = GuardianLink(

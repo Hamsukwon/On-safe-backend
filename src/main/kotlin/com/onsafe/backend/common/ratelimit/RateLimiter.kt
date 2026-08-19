@@ -43,7 +43,7 @@ class RateLimiter(private val redis: ReactiveStringRedisTemplate) {
 
     /**
      * [allow]를 호출해 초과 시 [ErrorCode.TOO_MANY_REQUESTS]를, Redis 장애로 확인 자체가 실패하면
-     * [ErrorCode.RATE_LIMIT_UNAVAILABLE]을 던진다. 외부 SDK(Redis) 예외가 서비스 레이어를 거치지 않고
+     * [ErrorCode.REDIS_UNAVAILABLE]을 던진다. 외부 SDK(Redis) 예외가 서비스 레이어를 거치지 않고
      * 컨트롤러까지 그대로 전파되지 않도록 여기서 BusinessException으로 래핑한다.
      */
     suspend fun requireAllowed(key: String, limit: Long, windowSec: Long) {
@@ -51,7 +51,7 @@ class RateLimiter(private val redis: ReactiveStringRedisTemplate) {
             allow(key, limit, windowSec)
         } catch (e: Exception) {
             log.error("레이트리밋 확인 실패 (key: $key): ${e.message}", e)
-            throw BusinessException(ErrorCode.RATE_LIMIT_UNAVAILABLE)
+            throw BusinessException(ErrorCode.REDIS_UNAVAILABLE)
         }
         if (!allowed) throw BusinessException(ErrorCode.TOO_MANY_REQUESTS)
     }
