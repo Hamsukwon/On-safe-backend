@@ -8,6 +8,7 @@ import com.onsafe.backend.common.util.toTimestamp
 import com.onsafe.backend.domain.guardian.model.entity.GuardianLink
 import org.springframework.stereotype.Repository
 import java.time.LocalDateTime
+import java.util.Base64
 
 @Repository
 class GuardianLinkRepository(private val firestore: Firestore) {
@@ -15,7 +16,14 @@ class GuardianLinkRepository(private val firestore: Firestore) {
     private val col get() = firestore.collection("guardian_links")
 
     // 문서 ID를 guardianUserId_elderUserId 복합키로 고정해 동일 관계 중복 저장을 원천 차단한다.
-    private fun docId(guardianUserId: String, elderUserId: String) = "${guardianUserId}_$elderUserId"
+    // userId 자체에 글자 수 제한이 없어 "_"를 그대로 구분자로 쓰면 예를 들어
+    // (guardian="a_b", elder="c")와 (guardian="a", elder="b_c")가 똑같이 "a_b_c"로 충돌한다.
+    // 각 파트를 URL-safe Base64(패딩 없음, 알파벳에 ":" 없음)로 인코딩한 뒤 ":"로 이어붙이면
+    // 구분자가 인코딩 결과에 절대 나타나지 않아 충돌이 구조적으로 불가능하다.
+    private val idEncoder = Base64.getUrlEncoder().withoutPadding()
+
+    private fun docId(guardianUserId: String, elderUserId: String) =
+        "${idEncoder.encodeToString(guardianUserId.toByteArray())}:${idEncoder.encodeToString(elderUserId.toByteArray())}"
 
     suspend fun exists(guardianUserId: String, elderUserId: String): Boolean =
         col.document(docId(guardianUserId, elderUserId)).get().await().exists()

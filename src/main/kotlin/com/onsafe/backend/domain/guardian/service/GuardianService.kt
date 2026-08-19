@@ -2,6 +2,7 @@ package com.onsafe.backend.domain.guardian.service
 
 import com.onsafe.backend.common.exception.BusinessException
 import com.onsafe.backend.common.exception.ErrorCode
+import com.onsafe.backend.common.ratelimit.RateLimiter
 import com.onsafe.backend.domain.guardian.model.dto.PairingCodeResponse
 import com.onsafe.backend.domain.guardian.model.dto.WardResponse
 import com.onsafe.backend.domain.guardian.model.entity.GuardianLink
@@ -11,6 +12,7 @@ import kotlinx.coroutines.reactive.awaitFirstOrNull
 import kotlinx.coroutines.reactor.awaitSingle
 import org.springframework.data.redis.core.ReactiveStringRedisTemplate
 import org.springframework.stereotype.Service
+import java.security.SecureRandom
 import java.time.Duration
 
 private const val PAIRING_CODE_TTL = 300L  // 5분
@@ -19,8 +21,11 @@ private const val PAIRING_CODE_TTL = 300L  // 5분
 class GuardianService(
     private val guardianLinkRepository: GuardianLinkRepository,
     private val userRepository: UserRepository,
-    private val redis: ReactiveStringRedisTemplate
+    private val redis: ReactiveStringRedisTemplate,
+    private val rateLimiter: RateLimiter
 ) {
+
+    private val secureRandom = SecureRandom()
 
     // 유저당 활성 코드는 1개만 유지 — 재발급 시 이전 코드를 먼저 무효화해
     // 캡처/전달 과정에서 노출된 옛 코드가 계속 살아있지 않게 한다.
@@ -43,6 +48,9 @@ class GuardianService(
     }
 
     suspend fun pair(guardianUserId: String, code: String): WardResponse {
+        // 코드 공간이 10^6이라 브루트포스 방지를 위한 시도 횟수 제한 — 호출자(보호자) 기준.
+        rateLimiter.requireAllowed("rl:pair:$guardianUserId", limit = 10, windowSec = PAIRING_CODE_TTL)
+
         val key = "pairing_code:$code"
         val elderUserId = redis.opsForValue().get(key).awaitFirstOrNull()
             ?: throw BusinessException(ErrorCode.PAIRING_CODE_INVALID)
@@ -76,5 +84,7 @@ class GuardianService(
         if (!deleted) throw BusinessException(ErrorCode.PAIRING_NOT_FOUND)
     }
 
-    private fun generatePairingCode() = (100000..999999).random().toString()
+    // 페어링 코드는 타인 계정에 대한 읽기 권한을 부여하는 인증 수단이므로 예측 가능한
+    // kotlin.random.Random 대신 SecureRandom을 사용한다(AuthService.generateVerificationCode와 동일 이유).
+    private fun generatePairingCode(): String = "%06d".format(secureRandom.nextInt(1_000_000))
 }

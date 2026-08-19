@@ -14,7 +14,11 @@ import com.onsafe.backend.domain.notification.model.dto.NotificationRequest
 import com.onsafe.backend.domain.notification.model.dto.NotificationResponse
 import com.onsafe.backend.domain.notification.model.entity.Notification
 import com.onsafe.backend.domain.notification.repository.NotificationRepository
+import com.onsafe.backend.domain.user.model.entity.User
 import com.onsafe.backend.domain.user.repository.UserRepository
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 
@@ -30,7 +34,12 @@ class NotificationService(
     suspend fun sendNotification(request: NotificationRequest): NotificationResponse {
         val user = userRepository.findByUserId(request.userId)
             ?: throw BusinessException(ErrorCode.USER_NOT_FOUND)
+        return sendNotification(user, request)
+    }
 
+    // 이미 조회해둔 User가 있는 호출부(notifyElderAndGuardians)가 같은 유저를 다시 조회하지
+    // 않도록 분리한 내부 버전. 공개 API인 sendNotification(request)는 여전히 직접 조회한다.
+    private suspend fun sendNotification(user: User, request: NotificationRequest): NotificationResponse {
         // FCM 발송 성공/실패/토큰 없음과 무관하게 알림 목록에는 항상 남긴다 — 목록 API가
         // push 전송 결과에 의존하지 않고 "무슨 알림이 발생했는지"를 그대로 반영해야 하기 때문.
         notificationRepository.save(
@@ -76,7 +85,8 @@ class NotificationService(
 
     /**
      * 피보호자 본인 + 연결된 보호자 전원에게 알림을 보낸다. 발송 대상별로 개별 실패를 격리해
-     * 한 명(예: 만료된 FCM 토큰) 실패가 나머지 수신자 발송을 막지 않게 한다.
+     * 한 명(예: 만료된 FCM 토큰) 실패가 나머지 수신자 발송을 막지 않게 하고, 보호자 발송은
+     * 서로 독립적이므로 병렬로 처리해 보호자 수에 비례해 지연이 누적되지 않게 한다.
      */
     suspend fun notifyElderAndGuardians(
         elderUserId: String,
@@ -87,18 +97,25 @@ class NotificationService(
         fall: Boolean = false,
         data: Map<String, String>? = null
     ) {
+        val elder = userRepository.findByUserId(elderUserId)
+
         runCatching {
-            sendNotification(NotificationRequest(elderUserId, title, body, logId, score, fall, data))
+            if (elder == null) throw BusinessException(ErrorCode.USER_NOT_FOUND)
+            sendNotification(elder, NotificationRequest(elderUserId, title, body, logId, score, fall, data))
         }.onFailure { e -> log.warn("알림 전송 실패 (userId: $elderUserId): ${e.message}") }
 
         val guardianIds = guardianLinkRepository.findGuardiansOf(elderUserId)
         if (guardianIds.isEmpty()) return
 
-        val elderName = userRepository.findByUserId(elderUserId)?.name ?: elderUserId
-        for (guardianId in guardianIds) {
-            runCatching {
-                sendNotification(NotificationRequest(guardianId, title, "[$elderName] $body", logId, score, fall, data))
-            }.onFailure { e -> log.warn("보호자 알림 전송 실패 (guardianId: $guardianId): ${e.message}") }
+        val elderName = elder?.name ?: elderUserId
+        coroutineScope {
+            guardianIds.map { guardianId ->
+                async {
+                    runCatching {
+                        sendNotification(NotificationRequest(guardianId, title, "[$elderName] $body", logId, score, fall, data))
+                    }.onFailure { e -> log.warn("보호자 알림 전송 실패 (guardianId: $guardianId): ${e.message}") }
+                }
+            }.awaitAll()
         }
     }
 

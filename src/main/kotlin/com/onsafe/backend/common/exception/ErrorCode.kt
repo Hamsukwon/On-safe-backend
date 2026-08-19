@@ -10,6 +10,7 @@ enum class ErrorCode(
     FORBIDDEN(HttpStatus.FORBIDDEN, "접근 권한이 없습니다."),
     INVALID_INPUT(HttpStatus.BAD_REQUEST, "요청 값이 유효하지 않습니다."),
     TOO_MANY_REQUESTS(HttpStatus.TOO_MANY_REQUESTS, "요청이 너무 많습니다. 잠시 후 다시 시도해주세요."),
+    RATE_LIMIT_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "일시적으로 요청을 처리할 수 없습니다. 잠시 후 다시 시도해주세요."),
 
     // ── 인증/회원 ──────────────────────────────────────────
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."),
