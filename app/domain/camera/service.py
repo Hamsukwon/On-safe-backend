@@ -32,7 +32,17 @@ _REALTIME_LIMIT = 2000
 
 async def process_frame(landmarks: list, timestamp: float, user_id: str, device_id: str) -> StreamResponse:
     result = await infer_landmarks_async(landmarks, device_id, timestamp)
-    if not result["features"]:  # 윈도우 미달 또는 STRIDE 미달
+
+    # 추론 실패(전처리·추론 예외)를 정상 스킵과 구분한다.
+    # 실패를 "정상"으로 단정하면 포즈 검출이 나쁜 순간의 낙상을 안전으로 오보한다.
+    # → 이 윈도우는 알림 판정에서 제외하고, 보호자에게는 직전 캐시 점수를 유지해 보여준다.
+    if result.get("status") == "error":
+        cached = await get_score(user_id)
+        if cached:
+            return StreamResponse(score=cached["score"], fall=False, level=cached["level"])
+        return StreamResponse(score=0.0, fall=False, level=None)
+
+    if not result["features"]:  # 윈도우 미달 또는 STRIDE 미달 (정상 스킵)
         return StreamResponse(score=0.0, fall=False, level="정상")
     raw_score: float = result["score"]
     fall: bool = result["fall"]
