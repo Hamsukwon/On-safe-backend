@@ -65,4 +65,14 @@ class StorageService(
             gcsStorage.get(BlobId.of(bucketName, gcsPath)) != null
         }
     }
+
+    /**
+     * GCS 경로의 blob을 삭제한다. 존재하지 않으면 false.
+     * 개인정보보호법 제21조 파기 의무: 회원탈퇴 시 GCS 라이프사이클(최대 180일)을 기다리지 않고 즉시 파기하기 위해 사용.
+     */
+    suspend fun deleteBlob(gcsPath: String): Boolean {
+        return withContext(Dispatchers.IO) {
+            gcsStorage.delete(BlobId.of(bucketName, gcsPath))
+        }
+    }
 }

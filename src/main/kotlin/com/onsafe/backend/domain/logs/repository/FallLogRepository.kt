@@ -122,6 +122,11 @@ class FallLogRepository(
         return docs.size.toLong()
     }
 
+    // 회원탈퇴 시 GCS blob도 함께 지워야 하는데(개인정보 파기 의무), blob 경로는 logId 기반이라
+    // Firestore 문서 삭제 전에 logId를 먼저 수집할 필요가 있어 별도 조회 메서드로 분리.
+    suspend fun findLogIdsByUserId(userId: String): List<String> =
+        col.whereEqualTo("user_id", userId).get().await().documents.map { it.id }
+
     private suspend fun getDocIfOwned(logId: String, userId: String): DocumentSnapshot? {
         val doc = col.document(logId).get().await()
         return if (doc.exists() && doc.getString("user_id") == userId) doc else null
