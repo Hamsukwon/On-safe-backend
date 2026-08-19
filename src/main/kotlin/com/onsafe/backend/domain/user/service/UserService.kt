@@ -88,6 +88,10 @@ class UserService(
         loginHistoryRepository.deleteByUserId(userId)
         settingsRepository.deleteByUserId(userId)
         notificationRepository.deleteByUserId(userId)
+        // notifyElderAndGuardians가 피보호자 본인 + 보호자 각각에게 별도 알림 문서를 남기므로,
+        // 본인 알림만 지우면 보호자 인박스엔 삭제된 사용자를 가리키는 알림이 그대로 남는다.
+        // 방금 수집한 logIds로 이 사용자의 낙상 이벤트를 참조하는 모든 알림(보호자 사본 포함)을 지운다.
+        notificationRepository.deleteByLogIds(logIds)
         guardianLinkRepository.deleteAllInvolving(userId)
         userRepository.deleteByUserId(userId)
     }

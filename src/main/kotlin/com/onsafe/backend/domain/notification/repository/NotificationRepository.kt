@@ -1,5 +1,6 @@
 package com.onsafe.backend.domain.notification.repository
 
+import com.google.cloud.firestore.DocumentReference
 import com.google.cloud.firestore.DocumentSnapshot
 import com.google.cloud.firestore.Firestore
 import com.google.cloud.firestore.Query
@@ -31,7 +32,29 @@ class NotificationRepository(private val firestore: Firestore) {
 
     suspend fun deleteByUserId(userId: String) {
         val docs = col.whereEqualTo("user_id", userId).get().await().documents
-        docs.forEach { it.reference.delete().await() }
+        deleteInBatches(docs.map { it.reference })
+    }
+
+    // 회원탈퇴 시 본인 알림뿐 아니라, 그 사용자의 낙상 이벤트를 참조해 보호자 인박스에
+    // 별도로 저장된 알림 사본도 함께 지운다(notifyElderAndGuardians가 피보호자 본인 + 보호자
+    // 각각에게 개별 문서를 남기므로, 탈퇴 후에도 보호자 쪽에 남은 사본이 존재 이름·삭제된
+    // logId를 계속 가리키는 stale 데이터로 남는 것을 막기 위함).
+    suspend fun deleteByLogIds(logIds: List<String>) {
+        if (logIds.isEmpty()) return
+        // Firestore whereIn은 값 30개까지만 허용해 청크로 나눈다.
+        val refs = logIds.chunked(30).flatMap { chunk ->
+            col.whereIn("log_id", chunk).get().await().documents.map { it.reference }
+        }
+        deleteInBatches(refs)
+    }
+
+    private suspend fun deleteInBatches(refs: List<DocumentReference>) {
+        // Firestore WriteBatch는 최대 500건까지 허용해 청크로 나눠 커밋한다.
+        refs.chunked(500).forEach { chunk ->
+            val batch = firestore.batch()
+            chunk.forEach { batch.delete(it) }
+            batch.commit().await()
+        }
     }
 
     suspend fun markRead(notificationId: String, userId: String): Notification? {

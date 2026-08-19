@@ -4,6 +4,7 @@ import com.onsafe.backend.common.exception.BusinessException
 import com.onsafe.backend.common.exception.ErrorCode
 import com.onsafe.backend.common.ratelimit.RateLimiter
 import com.onsafe.backend.common.security.JwtProvider
+import com.onsafe.backend.common.security.VerificationCodeGenerator
 import com.onsafe.backend.domain.auth.model.dto.*
 import com.onsafe.backend.domain.auth.model.entity.LoginHistory
 import com.onsafe.backend.domain.auth.repository.LoginHistoryRepository
@@ -59,7 +60,7 @@ class AuthServiceTest {
         coEvery { rateLimiter.requireAllowed(any(), any(), any()) } just Runs
         authService = AuthService(
             userRepository, passwordEncoder, jwtProvider, emailService, redis,
-            loginHistoryRepository, settingsRepository, rateLimiter
+            loginHistoryRepository, settingsRepository, rateLimiter, VerificationCodeGenerator()
         )
     }
 

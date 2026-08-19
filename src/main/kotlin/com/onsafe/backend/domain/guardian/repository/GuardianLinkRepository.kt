@@ -22,8 +22,12 @@ class GuardianLinkRepository(private val firestore: Firestore) {
     // 구분자가 인코딩 결과에 절대 나타나지 않아 충돌이 구조적으로 불가능하다.
     private val idEncoder = Base64.getUrlEncoder().withoutPadding()
 
+    // toByteArray()에 charset을 명시하지 않으면 JVM 기본 charset(플랫폼/로케일에 따라 달라짐)을 쓴다.
+    // 개발 환경(Windows)과 배포 컨테이너(Linux)가 비-ASCII userId에 대해 서로 다른 바이트를
+    // 만들면 같은 (보호자,피보호자) 쌍인데도 환경마다 다른 문서ID가 생길 수 있어 반드시 고정한다.
     private fun docId(guardianUserId: String, elderUserId: String) =
-        "${idEncoder.encodeToString(guardianUserId.toByteArray())}:${idEncoder.encodeToString(elderUserId.toByteArray())}"
+        "${idEncoder.encodeToString(guardianUserId.toByteArray(Charsets.UTF_8))}:" +
+            idEncoder.encodeToString(elderUserId.toByteArray(Charsets.UTF_8))
 
     suspend fun exists(guardianUserId: String, elderUserId: String): Boolean =
         col.document(docId(guardianUserId, elderUserId)).get().await().exists()
@@ -47,10 +51,16 @@ class GuardianLinkRepository(private val firestore: Firestore) {
     }
 
     // 계정 탈퇴 시 이 유저가 보호자·피보호자 어느 쪽으로 맺은 관계든 전부 정리한다.
+    // WriteBatch로 묶어 커밋해, 연결된 관계가 많을 때 문서당 별도 왕복이 생기지 않게 한다
+    // (최대 500건/배치라 청크로 나눠 커밋 — 이 정도 규모를 넘는 사용자는 사실상 없음).
     suspend fun deleteAllInvolving(userId: String) {
         val asGuardian = col.whereEqualTo("guardian_user_id", userId).get().await().documents
         val asElder = col.whereEqualTo("elder_user_id", userId).get().await().documents
-        (asGuardian + asElder).forEach { it.reference.delete().await() }
+        (asGuardian + asElder).map { it.reference }.chunked(500).forEach { chunk ->
+            val batch = firestore.batch()
+            chunk.forEach { batch.delete(it) }
+            batch.commit().await()
+        }
     }
 
     private fun DocumentSnapshot.toLink() = GuardianLink(

@@ -4,6 +4,7 @@ import com.onsafe.backend.common.exception.BusinessException
 import com.onsafe.backend.common.exception.ErrorCode
 import com.onsafe.backend.common.ratelimit.RateLimiter
 import com.onsafe.backend.common.security.JwtProvider
+import com.onsafe.backend.common.security.VerificationCodeGenerator
 import com.onsafe.backend.domain.auth.model.dto.*
 import com.onsafe.backend.domain.auth.model.entity.LoginHistory
 import com.onsafe.backend.domain.auth.repository.LoginHistoryRepository
@@ -17,7 +18,6 @@ import org.slf4j.LoggerFactory
 import org.springframework.data.redis.core.ReactiveStringRedisTemplate
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
-import java.security.SecureRandom
 import java.time.Duration
 
 private const val EMAIL_CODE_TTL = 180L    // 3분
@@ -33,11 +33,11 @@ class AuthService(
     private val redis: ReactiveStringRedisTemplate,
     private val loginHistoryRepository: LoginHistoryRepository,
     private val settingsRepository: SettingsRepository,
-    private val rateLimiter: RateLimiter
+    private val rateLimiter: RateLimiter,
+    private val verificationCodeGenerator: VerificationCodeGenerator
 ) {
 
     private val log = LoggerFactory.getLogger(javaClass)
-    private val secureRandom = SecureRandom()
 
     // access token만 블랙리스트하면 refresh token으로 재발급이 계속 가능해 로그아웃의
     // 보안 효과가 제한적이므로, 두 토큰 모두를 각자 남은 만료 시간만큼 블랙리스트한다.
@@ -62,7 +62,7 @@ class AuthService(
     suspend fun sendEmailCode(request: SendEmailCodeRequest) {
         // 이메일 주소당 시간당 3회 — SES 비용 폭탄 및 인박스 스팸 방지.
         rateLimiter.requireAllowed("rl:send-email:${request.mail}", limit = 3, windowSec = 3600)
-        val code = generateVerificationCode()
+        val code = verificationCodeGenerator.generate()
         redis.opsForValue()
             .set("email_verify:${request.mail}", code, Duration.ofSeconds(EMAIL_CODE_TTL))
             .awaitSingle()
@@ -85,7 +85,7 @@ class AuthService(
             ?: throw BusinessException(ErrorCode.USER_NOT_FOUND)
         if (user.mail != request.mail) throw BusinessException(ErrorCode.MAIL_NOT_MATCH)
 
-        val code = generateVerificationCode()
+        val code = verificationCodeGenerator.generate()
         redis.opsForValue()
             .set("reset_code:${request.userId}", code, Duration.ofSeconds(RESET_CODE_TTL))
             .awaitSingle()
@@ -228,10 +228,6 @@ class AuthService(
         accessToken = jwtProvider.generateAccessToken(userId, mail),
         refreshToken = jwtProvider.generateRefreshToken(userId, mail)
     )
-
-    // SecureRandom을 쓰는 이유: 재설정/인증 코드는 계정 탈취 경로이므로 예측 가능한 kotlin.random.Random 대신
-    // 암호학적 RNG가 필요하다. `%06d`로 앞자리 0 포함 6자리를 항상 보장한다.
-    private fun generateVerificationCode(): String = "%06d".format(secureRandom.nextInt(1_000_000))
 
     private fun maskUserId(userId: String): String {
         if (userId.length <= 3) return userId
