@@ -93,7 +93,7 @@ class UserService(
             }.awaitAll()
         }
 
-        // 아래 6개 삭제는 서로 다른 컬렉션에 대한 독립적인 Firestore 요청이라 병렬로 처리한다.
+        // 아래 7개 삭제는 서로 다른 컬렉션에 대한 독립적인 Firestore 요청이라 병렬로 처리한다.
         // notifyElderAndGuardians가 피보호자 본인 + 보호자 각각에게 별도 알림 문서를 남기므로,
         // deleteByUserId(본인 알림)만으로는 부족해 방금 수집한 logIds로 보호자 인박스에 남은
         // 관련 알림 사본까지 deleteByLogIds로 함께 정리한다.

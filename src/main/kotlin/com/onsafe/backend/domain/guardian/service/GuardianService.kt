@@ -12,7 +12,6 @@ import com.onsafe.backend.domain.user.repository.UserRepository
 import kotlinx.coroutines.reactive.awaitFirstOrNull
 import kotlinx.coroutines.reactive.awaitSingle
 import org.slf4j.LoggerFactory
-import org.springframework.dao.DataAccessException
 import org.springframework.data.redis.core.ReactiveStringRedisTemplate
 import org.springframework.data.redis.core.script.RedisScript
 import org.springframework.stereotype.Service
@@ -30,12 +29,17 @@ class GuardianService(
 
     private val log = LoggerFactory.getLogger(javaClass)
 
-    // 코드 중복 여부 확인과 실제 발급을 한 스크립트 안에서 원자적으로 처리한다 — 별개의
-    // EXISTS 호출 후 SET하면 그 사이에 동시 요청이 같은 코드를 먼저 선점할 수 있다(TOCTOU).
-    // pairing_code:$code 와 pairing_code_owner:$elderUserId 두 키도 이 스크립트 안에서 함께 써서,
-    // 코루틴이 중간에 취소돼도 한쪽 키만 살아남는 일이 없게 한다. 이미 존재하면 0, 발급 성공하면 1.
+    // 코드 중복 여부 확인, 이전 코드 무효화, 신규 발급을 한 스크립트 안에서 원자적으로 처리한다.
+    // 이전 코드 무효화(GET ownerKey → DEL pairing_code:oldCode)를 별도 호출로 하면 그 사이에
+    // pair()가 old code를 소비하고 ownerKey를 갱신하는 흐름과 인터리빙되어, 코드가 2개 동시에
+    // 유효해지거나 방금 발급한 새 코드의 소유권 매핑이 사라지는 경쟁 상태가 생길 수 있다.
+    // KEYS[1]=pairing_code:$code(신규), KEYS[2]=ownerKey. 신규 코드가 이미 존재하면 0, 발급 성공하면 1.
     private val issueCodeScript: RedisScript<Long> = RedisScript.of(
         """
+        local oldCode = redis.call('GET', KEYS[2])
+        if oldCode then
+            redis.call('DEL', 'pairing_code:' .. oldCode)
+        end
         if redis.call('EXISTS', KEYS[1]) == 1 then
             return 0
         end
@@ -46,31 +50,48 @@ class GuardianService(
         Long::class.java
     )
 
+    // pair()가 코드를 소비한 뒤 ownerKey를 지울 때, 그 사이 issuePairingCode가 새 코드를 발급해
+    // ownerKey를 이미 갱신했다면 무조건 삭제해선 안 된다 — 방금 발급된 새 코드의 소유권 매핑까지
+    // 함께 지워지는 경쟁 상태가 생긴다. ownerKey 값이 여전히 방금 소비한 코드일 때만 지운다
+    // (compare-and-delete). KEYS[1]=ownerKey, ARGV[1]=소비한 code.
+    private val deleteOwnerIfMatchScript: RedisScript<Long> = RedisScript.of(
+        """
+        if redis.call('GET', KEYS[1]) == ARGV[1] then
+            return redis.call('DEL', KEYS[1])
+        end
+        return 0
+        """.trimIndent(),
+        Long::class.java
+    )
+
     // 유저당 활성 코드는 1개만 유지 — 재발급 시 이전 코드를 먼저 무효화해
     // 캡처/전달 과정에서 노출된 옛 코드가 계속 살아있지 않게 한다.
-    suspend fun issuePairingCode(elderUserId: String): PairingCodeResponse = redisGuarded {
-        val ownerKey = "pairing_code_owner:$elderUserId"
-        redis.opsForValue().get(ownerKey).awaitFirstOrNull()?.let { oldCode ->
-            redis.delete("pairing_code:$oldCode").awaitSingle()
-        }
+    suspend fun issuePairingCode(elderUserId: String): PairingCodeResponse {
+        // 재발급 남용 방지 — sendEmailCode/sendResetCode(시간당 3회)와 동일한 원칙.
+        rateLimiter.requireAllowed("rl:issue-pairing-code:$elderUserId", limit = 5, windowSec = 3600)
 
-        lateinit var code: String
-        while (true) {
-            code = verificationCodeGenerator.generate()
-            val claimed = redis.execute(
-                issueCodeScript,
-                listOf("pairing_code:$code", ownerKey),
-                listOf(elderUserId, code, PAIRING_CODE_TTL.toString())
-            ).awaitSingle()
-            if (claimed == 1L) break
-        }
+        return redisGuarded {
+            val ownerKey = "pairing_code_owner:$elderUserId"
+            lateinit var code: String
+            while (true) {
+                code = verificationCodeGenerator.generate()
+                val claimed = redis.execute(
+                    issueCodeScript,
+                    listOf("pairing_code:$code", ownerKey),
+                    listOf(elderUserId, code, PAIRING_CODE_TTL.toString())
+                ).awaitSingle()
+                if (claimed == 1L) break
+            }
 
-        PairingCodeResponse(code = code, expiresInSeconds = PAIRING_CODE_TTL)
+            PairingCodeResponse(code = code, expiresInSeconds = PAIRING_CODE_TTL)
+        }
     }
 
-    suspend fun pair(guardianUserId: String, code: String): WardResponse {
-        // 코드 공간이 10^6이라 브루트포스 방지를 위한 시도 횟수 제한 — 호출자(보호자) 기준.
-        rateLimiter.requireAllowed("rl:pair:$guardianUserId", limit = 10, windowSec = PAIRING_CODE_TTL)
+    suspend fun pair(guardianUserId: String, code: String, ipAddress: String): WardResponse {
+        // 이중 rate-limit: IP는 여러 계정을 만들어 우회하는 자동화 시도 대응, guardianUserId는
+        // 코드 공간(10^6)에 대한 특정 계정 브루트포스 대응. AuthService.login과 동일한 원칙.
+        rateLimiter.requireAllowed("rl:pair:ip:$ipAddress", limit = 30, windowSec = PAIRING_CODE_TTL)
+        rateLimiter.requireAllowed("rl:pair:uid:$guardianUserId", limit = 10, windowSec = PAIRING_CODE_TTL)
 
         // GETDEL로 조회와 즉시 무효화를 원자적으로 묶는다 — 같은 코드로 pair()가 동시에 호출돼도
         // Redis가 원자적으로 처리하므로 정확히 한 요청만 elderUserId를 얻고, 나머지는 코드가 이미
@@ -82,7 +103,13 @@ class GuardianService(
         val elderUserId = redisGuarded {
             redis.opsForValue().getAndDelete("pairing_code:$code").awaitFirstOrNull()
         } ?: throw BusinessException(ErrorCode.PAIRING_CODE_INVALID)
-        redisGuarded { redis.delete("pairing_code_owner:$elderUserId").awaitSingle() }
+        redisGuarded {
+            redis.execute(
+                deleteOwnerIfMatchScript,
+                listOf("pairing_code_owner:$elderUserId"),
+                listOf(code)
+            ).awaitSingle()
+        }
 
         if (elderUserId == guardianUserId) throw BusinessException(ErrorCode.SELF_PAIRING_NOT_ALLOWED)
 
@@ -110,10 +137,12 @@ class GuardianService(
     }
 
     // RateLimiter.requireAllowed와 동일한 원칙 — Redis SDK 예외가 컨트롤러까지 그대로
-    // 새지 않도록 여기서 BusinessException으로 래핑한다.
+    // 새지 않도록 여기서 BusinessException으로 래핑한다. DataAccessException으로 좁혀 잡으면
+    // 클라이언트 구현체별로 다른 런타임 예외가 래핑 없이 그대로 새어나갈 수 있어 RateLimiter와
+    // 동일하게 Exception 전체를 잡는다.
     private suspend fun <T> redisGuarded(block: suspend () -> T): T = try {
         block()
-    } catch (e: DataAccessException) {
+    } catch (e: Exception) {
         log.error("Redis 오류 (guardian pairing): ${e.message}", e)
         throw BusinessException(ErrorCode.REDIS_UNAVAILABLE)
     }

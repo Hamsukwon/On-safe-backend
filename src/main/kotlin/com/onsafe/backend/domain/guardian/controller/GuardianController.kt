@@ -13,6 +13,7 @@ import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.web.bind.annotation.*
+import org.springframework.web.server.ServerWebExchange
 
 @Tag(name = "Guardian", description = "보호자 페어링 API")
 @RestController
@@ -42,10 +43,14 @@ class GuardianController(private val guardianService: GuardianService) {
     suspend fun pair(
         @PathVariable userId: String,
         @AuthenticationPrincipal principal: String,
-        @Valid @RequestBody request: PairRequest
+        @Valid @RequestBody request: PairRequest,
+        exchange: ServerWebExchange
     ): ApiResponse<WardResponse> {
         if (principal != userId) throw BusinessException(ErrorCode.FORBIDDEN)
-        return ApiResponse.ok(guardianService.pair(userId, request.code), "보호자 연결이 완료되었습니다.")
+        val ipAddress = exchange.request.headers.getFirst("X-Forwarded-For")?.split(",")?.first()?.trim()
+            ?: exchange.request.remoteAddress?.address?.hostAddress
+            ?: "unknown"
+        return ApiResponse.ok(guardianService.pair(userId, request.code, ipAddress), "보호자 연결이 완료되었습니다.")
     }
 
     @Operation(summary = "연결된 피보호자 목록 조회 (보호자용)", security = [SecurityRequirement(name = "BearerAuth")])
