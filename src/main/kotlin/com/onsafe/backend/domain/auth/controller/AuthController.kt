@@ -1,6 +1,7 @@
 package com.onsafe.backend.domain.auth.controller
 
 import com.onsafe.backend.common.response.ApiResponse
+import com.onsafe.backend.common.util.clientIpAddress
 import com.onsafe.backend.domain.auth.model.dto.*
 import com.onsafe.backend.domain.auth.service.AuthService
 import io.swagger.v3.oas.annotations.Operation
@@ -29,9 +30,7 @@ class AuthController(private val authService: AuthService) {
         @Valid @RequestBody request: LoginRequest,
         exchange: ServerWebExchange
     ): ApiResponse<LoginResponse> {
-        val ipAddress = exchange.request.headers.getFirst("X-Forwarded-For")?.split(",")?.first()?.trim()
-            ?: exchange.request.remoteAddress?.address?.hostAddress
-            ?: "unknown"
+        val ipAddress = exchange.clientIpAddress()
         val userAgent = exchange.request.headers.getFirst("User-Agent") ?: "unknown"
         val response = authService.login(request, ipAddress, userAgent)
         return ApiResponse.ok(response)

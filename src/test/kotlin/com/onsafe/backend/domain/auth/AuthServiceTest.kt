@@ -4,6 +4,7 @@ import com.onsafe.backend.common.exception.BusinessException
 import com.onsafe.backend.common.exception.ErrorCode
 import com.onsafe.backend.common.ratelimit.RateLimiter
 import com.onsafe.backend.common.security.JwtProvider
+import com.onsafe.backend.common.security.VerificationCodeGenerator
 import com.onsafe.backend.domain.auth.model.dto.*
 import com.onsafe.backend.domain.auth.model.entity.LoginHistory
 import com.onsafe.backend.domain.auth.repository.LoginHistoryRepository
@@ -12,8 +13,10 @@ import com.onsafe.backend.domain.auth.service.EmailService
 import com.onsafe.backend.domain.settings.repository.SettingsRepository
 import com.onsafe.backend.domain.user.model.entity.User
 import com.onsafe.backend.domain.user.repository.UserRepository
+import io.mockk.Runs
 import io.mockk.coEvery
 import io.mockk.every
+import io.mockk.just
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -54,10 +57,10 @@ class AuthServiceTest {
         every { redis.opsForValue() } returns valueOps
         coEvery { loginHistoryRepository.save(any()) } answers { firstArg<LoginHistory>() }
         // 레이트리밋은 기본 허용 — 리밋 초과 자체를 검증하는 테스트가 아니므로 항상 통과시켜 기존 케이스 로직에 집중한다.
-        coEvery { rateLimiter.allow(any(), any(), any()) } returns true
+        coEvery { rateLimiter.requireAllowed(any(), any(), any()) } just Runs
         authService = AuthService(
             userRepository, passwordEncoder, jwtProvider, emailService, redis,
-            loginHistoryRepository, settingsRepository, rateLimiter
+            loginHistoryRepository, settingsRepository, rateLimiter, VerificationCodeGenerator()
         )
     }
 
