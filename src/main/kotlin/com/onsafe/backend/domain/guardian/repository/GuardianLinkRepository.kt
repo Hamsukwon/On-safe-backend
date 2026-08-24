@@ -33,8 +33,18 @@ class GuardianLinkRepository(private val firestore: Firestore) {
     suspend fun exists(guardianUserId: String, elderUserId: String): Boolean =
         col.document(docId(guardianUserId, elderUserId)).get().await().exists()
 
-    suspend fun save(link: GuardianLink) {
-        col.document(docId(link.guardianUserId, link.elderUserId)).set(link.toMap()).await()
+    // exists() 확인 후 별도로 save()하면 그 사이 창에서 같은 (보호자,피보호자) 쌍에 대한 동시
+    // pair() 호출이 둘 다 "존재하지 않음"으로 통과해 하나가 다른 하나를 덮어쓸 수 있다(TOCTOU).
+    // 조회와 쓰기를 트랜잭션으로 묶어 원자적으로 처리한다. 이미 존재했으면 false, 새로 만들었으면 true.
+    suspend fun createIfNotExists(link: GuardianLink): Boolean {
+        val ref = col.document(docId(link.guardianUserId, link.elderUserId))
+        return firestore.runTransaction { tx ->
+            val alreadyExists = tx.get(ref).get().exists()
+            if (!alreadyExists) {
+                tx.set(ref, link.toMap())
+            }
+            !alreadyExists
+        }.await()
     }
 
     suspend fun findWardsOf(guardianUserId: String): List<GuardianLink> =

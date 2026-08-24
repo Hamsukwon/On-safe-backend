@@ -97,16 +97,30 @@ class UserService(
         // notifyElderAndGuardians가 피보호자 본인 + 보호자 각각에게 별도 알림 문서를 남기므로,
         // deleteByUserId(본인 알림)만으로는 부족해 방금 수집한 logIds로 보호자 인박스에 남은
         // 관련 알림 사본까지 deleteByLogIds로 함께 정리한다.
+        // 위 blob 삭제와 동일하게 각 작업을 runCatching으로 격리한다 — 격리하지 않으면 하나가
+        // 예외를 던질 때 coroutineScope가 나머지 형제 코루틴을 취소해(구조적 동시성) 일부
+        // 컬렉션만 지워진 불확실한 상태로 남고, 맨 아래 계정 문서 삭제까지 막혀버린다.
         coroutineScope {
-            awaitAll(
-                async { fallLogRepository.deleteByUserId(userId) },
-                async { realtimeDataRepository.deleteByUserId(userId) },
-                async { loginHistoryRepository.deleteByUserId(userId) },
-                async { settingsRepository.deleteByUserId(userId) },
-                async { notificationRepository.deleteByUserId(userId) },
-                async { notificationRepository.deleteByLogIds(logIds) },
-                async { guardianLinkRepository.deleteAllInvolving(userId) }
+            val deletions = listOf(
+                "fall_logs" to suspend { fallLogRepository.deleteByUserId(userId) },
+                "realtime_data" to suspend { realtimeDataRepository.deleteByUserId(userId) },
+                "login_history" to suspend { loginHistoryRepository.deleteByUserId(userId) },
+                "settings" to suspend { settingsRepository.deleteByUserId(userId) },
+                "notifications(본인)" to suspend { notificationRepository.deleteByUserId(userId) },
+                "notifications(보호자 사본)" to suspend { notificationRepository.deleteByLogIds(logIds) },
+                "guardian_links" to suspend { guardianLinkRepository.deleteAllInvolving(userId) }
             )
+            deletions.map { (name, delete) ->
+                async {
+                    runCatching { delete() }
+                        .onFailure { e ->
+                            log.warn(
+                                "탈퇴 시 연쇄 삭제 실패 — userId={}, collection={}, cause={}",
+                                userId, name, e.javaClass.simpleName
+                            )
+                        }
+                }
+            }.awaitAll()
         }
         // 계정 문서 자체는 위 정리가 전부 끝난 뒤 마지막에 지운다.
         userRepository.deleteByUserId(userId)

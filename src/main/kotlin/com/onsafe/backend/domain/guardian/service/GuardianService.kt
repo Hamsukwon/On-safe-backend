@@ -4,6 +4,7 @@ import com.onsafe.backend.common.exception.BusinessException
 import com.onsafe.backend.common.exception.ErrorCode
 import com.onsafe.backend.common.ratelimit.RateLimiter
 import com.onsafe.backend.common.security.VerificationCodeGenerator
+import com.onsafe.backend.common.util.guardRedis
 import com.onsafe.backend.domain.guardian.model.dto.PairingCodeResponse
 import com.onsafe.backend.domain.guardian.model.dto.WardResponse
 import com.onsafe.backend.domain.guardian.model.entity.GuardianLink
@@ -116,11 +117,10 @@ class GuardianService(
         val elder = userRepository.findByUserId(elderUserId)
             ?: throw BusinessException(ErrorCode.USER_NOT_FOUND)
 
-        if (guardianLinkRepository.exists(guardianUserId, elderUserId)) {
-            throw BusinessException(ErrorCode.PAIRING_ALREADY_EXISTS)
-        }
-
-        guardianLinkRepository.save(GuardianLink(guardianUserId = guardianUserId, elderUserId = elderUserId))
+        val created = guardianLinkRepository.createIfNotExists(
+            GuardianLink(guardianUserId = guardianUserId, elderUserId = elderUserId)
+        )
+        if (!created) throw BusinessException(ErrorCode.PAIRING_ALREADY_EXISTS)
 
         return WardResponse.from(elder)
     }
@@ -136,14 +136,8 @@ class GuardianService(
         if (!deleted) throw BusinessException(ErrorCode.PAIRING_NOT_FOUND)
     }
 
-    // RateLimiter.requireAllowed와 동일한 원칙 — Redis SDK 예외가 컨트롤러까지 그대로
-    // 새지 않도록 여기서 BusinessException으로 래핑한다. DataAccessException으로 좁혀 잡으면
-    // 클라이언트 구현체별로 다른 런타임 예외가 래핑 없이 그대로 새어나갈 수 있어 RateLimiter와
-    // 동일하게 Exception 전체를 잡는다.
-    private suspend fun <T> redisGuarded(block: suspend () -> T): T = try {
-        block()
-    } catch (e: Exception) {
-        log.error("Redis 오류 (guardian pairing): ${e.message}", e)
-        throw BusinessException(ErrorCode.REDIS_UNAVAILABLE)
-    }
+    // RateLimiter.requireAllowed와 동일한 래핑 정책을 common/util/RedisExt.kt의 guardRedis로 공유한다 —
+    // 정책이 바뀔 때 한쪽만 고치고 다른 쪽을 놓치는 일을 막기 위함.
+    private suspend fun <T> redisGuarded(block: suspend () -> T): T =
+        log.guardRedis("guardian pairing", block)
 }

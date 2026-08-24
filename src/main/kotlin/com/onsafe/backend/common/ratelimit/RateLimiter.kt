@@ -2,6 +2,7 @@ package com.onsafe.backend.common.ratelimit
 
 import com.onsafe.backend.common.exception.BusinessException
 import com.onsafe.backend.common.exception.ErrorCode
+import com.onsafe.backend.common.util.guardRedis
 import kotlinx.coroutines.reactive.awaitSingle
 import org.slf4j.LoggerFactory
 import org.springframework.data.redis.core.ReactiveStringRedisTemplate
@@ -47,12 +48,7 @@ class RateLimiter(private val redis: ReactiveStringRedisTemplate) {
      * 컨트롤러까지 그대로 전파되지 않도록 여기서 BusinessException으로 래핑한다.
      */
     suspend fun requireAllowed(key: String, limit: Long, windowSec: Long) {
-        val allowed = try {
-            allow(key, limit, windowSec)
-        } catch (e: Exception) {
-            log.error("레이트리밋 확인 실패 (key: $key): ${e.message}", e)
-            throw BusinessException(ErrorCode.REDIS_UNAVAILABLE)
-        }
+        val allowed = log.guardRedis("rate-limit key=$key") { allow(key, limit, windowSec) }
         if (!allowed) throw BusinessException(ErrorCode.TOO_MANY_REQUESTS)
     }
 }

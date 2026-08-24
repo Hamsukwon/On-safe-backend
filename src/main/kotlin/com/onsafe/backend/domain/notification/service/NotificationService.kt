@@ -98,18 +98,19 @@ class NotificationService(
         fall: Boolean = false,
         data: Map<String, String>? = null
     ) {
-        val elder = userRepository.findByUserId(elderUserId)
-
         coroutineScope {
+            val elderDeferred = async { userRepository.findByUserId(elderUserId) }
+            val guardianIdsDeferred = async { guardianLinkRepository.findGuardiansOf(elderUserId) }
+
             val elderSend = async {
                 runCatching {
-                    if (elder == null) throw BusinessException(ErrorCode.USER_NOT_FOUND)
+                    val elder = elderDeferred.await() ?: throw BusinessException(ErrorCode.USER_NOT_FOUND)
                     sendNotification(elder, NotificationRequest(elderUserId, title, body, logId, score, fall, data))
                 }.onFailure { e -> log.warn("알림 전송 실패 (userId: $elderUserId): ${e.message}") }
             }
 
-            val guardianIds = guardianLinkRepository.findGuardiansOf(elderUserId)
-            val elderName = elder?.name ?: elderUserId
+            val guardianIds = guardianIdsDeferred.await()
+            val elderName = elderDeferred.await()?.name ?: elderUserId
 
             val guardianSends = guardianIds.map { guardianId ->
                 async {
