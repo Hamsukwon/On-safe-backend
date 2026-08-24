@@ -100,7 +100,6 @@ class NotificationService(
     ) {
         coroutineScope {
             val elderDeferred = async { userRepository.findByUserId(elderUserId) }
-            val guardianIdsDeferred = async { guardianLinkRepository.findGuardiansOf(elderUserId) }
 
             val elderSend = async {
                 runCatching {
@@ -109,8 +108,14 @@ class NotificationService(
                 }.onFailure { e -> log.warn("알림 전송 실패 (userId: $elderUserId): ${e.message}") }
             }
 
-            val guardianIds = guardianIdsDeferred.await()
-            val elderName = elderDeferred.await()?.name ?: elderUserId
+            // 보호자 목록 조회와 elder 조회 실패를 여기서 직접 await()하면 coroutineScope의
+            // 구조적 동시성 때문에 이미 실행 중인 elderSend까지 취소되며 함수 전체가 예외를 던진다 —
+            // "피보호자 본인 발송은 보호자 쪽 실패와 무관하게 항상 이뤄져야 한다"는 이 함수의 격리
+            // 원칙이 깨진다. runCatching으로 감싸 실패해도 빈 목록/폴백 이름으로 계속 진행한다.
+            val guardianIds = runCatching { guardianLinkRepository.findGuardiansOf(elderUserId) }
+                .onFailure { e -> log.warn("보호자 목록 조회 실패 (elderUserId: $elderUserId): ${e.message}") }
+                .getOrDefault(emptyList())
+            val elderName = runCatching { elderDeferred.await() }.getOrNull()?.name ?: elderUserId
 
             val guardianSends = guardianIds.map { guardianId ->
                 async {

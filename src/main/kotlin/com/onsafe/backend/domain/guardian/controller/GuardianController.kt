@@ -3,6 +3,7 @@ package com.onsafe.backend.domain.guardian.controller
 import com.onsafe.backend.common.exception.BusinessException
 import com.onsafe.backend.common.exception.ErrorCode
 import com.onsafe.backend.common.response.ApiResponse
+import com.onsafe.backend.common.util.clientIpAddress
 import com.onsafe.backend.domain.guardian.model.dto.PairRequest
 import com.onsafe.backend.domain.guardian.model.dto.PairingCodeResponse
 import com.onsafe.backend.domain.guardian.model.dto.WardResponse
@@ -47,10 +48,7 @@ class GuardianController(private val guardianService: GuardianService) {
         exchange: ServerWebExchange
     ): ApiResponse<WardResponse> {
         if (principal != userId) throw BusinessException(ErrorCode.FORBIDDEN)
-        val ipAddress = exchange.request.headers.getFirst("X-Forwarded-For")?.split(",")?.first()?.trim()
-            ?: exchange.request.remoteAddress?.address?.hostAddress
-            ?: "unknown"
-        return ApiResponse.ok(guardianService.pair(userId, request.code, ipAddress), "보호자 연결이 완료되었습니다.")
+        return ApiResponse.ok(guardianService.pair(userId, request.code, exchange.clientIpAddress()), "보호자 연결이 완료되었습니다.")
     }
 
     @Operation(summary = "연결된 피보호자 목록 조회 (보호자용)", security = [SecurityRequirement(name = "BearerAuth")])
