@@ -76,5 +76,14 @@ class NotificationRepository(private val firestore: Firestore) {
         "fall" to fall,
         "is_read" to isRead,
         "created_at" to createdAt.toTimestamp(),
+        // Firestore TTL 정책(scripts/setup_firestore_ttl.py) 대상 필드 — 애플리케이션 코드는
+        // 이 값을 읽지 않는다. TTL은 필드 값 자체를 "삭제 예정 시각"으로 취급하므로 created_at을
+        // 그대로 넘기면 저장 직후 삭제된다 — 반드시 미래 시각(생성 시각 + 보관일수)을 계산해 넣어야 한다.
+        "expire_at" to createdAt.plusDays(FIRESTORE_TTL_RETENTION_DAYS).toTimestamp(),
     )
+
+    companion object {
+        // 서버 보관 정책(30일 고정, /api/settings/retention) — expire_at 계산에 사용.
+        const val FIRESTORE_TTL_RETENTION_DAYS = 30L
+    }
 }

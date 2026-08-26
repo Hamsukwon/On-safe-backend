@@ -4,9 +4,9 @@ TTL 대상으로 지정해, 문서가 expire_at 시각을 지나면 Firestore가
 (서버 보관 정책: 알림/사고이력 30일 고정 — 별도 삭제 배치 없이 이 정책으로 충족)
 
 사전 조건:
-  - Notification/FallLog(Kotlin) 저장 로직이 expire_at(Timestamp) 필드를 채워야 한다.
-    이 스크립트는 "필드를 TTL 대상으로 지정"만 하며, 필드 자체를 채우는 건 애플리케이션 코드의
-    책임이다 — expire_at이 없는 문서는 TTL 대상에서 자동 제외된다(삭제되지 않음).
+  - NotificationRepository/FallLogRepository(Kotlin)의 toMap()이 expire_at(Timestamp,
+    생성/발생 시각 + 30일)을 채워서 저장한다 — 반영 완료. expire_at이 없는 문서(이 필드 추가
+    이전에 저장된 기존 문서)는 TTL 대상에서 자동 제외된다(삭제되지 않음, 소급 적용 안 됨).
   - TTL 삭제는 만료 이후 최대 24시간 이내 best-effort로 실행된다 (Firestore 공식 정책).
   - firebase.json/firestore.indexes.json과 달리 Firebase CLI는 TTL을 지원하지 않아
     Admin API(firestore_admin_v1)로 직접 호출한다.
