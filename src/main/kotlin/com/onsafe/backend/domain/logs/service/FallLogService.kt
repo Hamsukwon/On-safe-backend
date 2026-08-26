@@ -3,9 +3,7 @@ package com.onsafe.backend.domain.logs.service
 import com.onsafe.backend.common.exception.BusinessException
 import com.onsafe.backend.common.exception.ErrorCode
 import com.onsafe.backend.common.storage.StorageService
-import com.onsafe.backend.domain.camera.model.entity.RiskLevel
 import com.onsafe.backend.domain.logs.model.dto.FallLogResponse
-import com.onsafe.backend.domain.logs.model.entity.FallLog
 import com.onsafe.backend.domain.logs.repository.FallLogRepository
 import org.springframework.stereotype.Service
 
@@ -50,7 +48,7 @@ class FallLogService(
     suspend fun getUploadUrl(userId: String, logId: String): String {
         val log = fallLogRepository.findByLogIdAndUserId(logId, userId)
             ?: throw BusinessException(ErrorCode.LOG_NOT_FOUND)
-        if (!log.isDangerLevel()) throw BusinessException(ErrorCode.VIDEO_NOT_ALLOWED)
+        if (!log.isDangerLevel) throw BusinessException(ErrorCode.VIDEO_NOT_ALLOWED)
         return storageService.generateSignedUploadUrl("fall-videos/$logId.mp4")
     }
 
@@ -61,7 +59,7 @@ class FallLogService(
     suspend fun completeVideoUpload(userId: String, logId: String): FallLogResponse {
         val existing = fallLogRepository.findByLogIdAndUserId(logId, userId)
             ?: throw BusinessException(ErrorCode.LOG_NOT_FOUND)
-        if (!existing.isDangerLevel()) throw BusinessException(ErrorCode.VIDEO_NOT_ALLOWED)
+        if (!existing.isDangerLevel) throw BusinessException(ErrorCode.VIDEO_NOT_ALLOWED)
 
         val gcsPath = "fall-videos/$logId.mp4"
         if (!storageService.blobExists(gcsPath)) throw BusinessException(ErrorCode.VIDEO_NOT_FOUND)
@@ -70,6 +68,4 @@ class FallLogService(
             ?: throw BusinessException(ErrorCode.LOG_NOT_FOUND)
         return FallLogResponse.from(log)
     }
-
-    private fun FallLog.isDangerLevel(): Boolean = score > RiskLevel.DANGER_THRESHOLD || fall
 }
