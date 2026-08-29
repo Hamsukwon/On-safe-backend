@@ -24,11 +24,19 @@ class NotificationRepository(private val firestore: Firestore) {
     }
 
     // Firestore 복합 인덱스(user_id ASC, created_at DESC) 필요 — firestore.indexes.json 참고.
-    suspend fun findRecentByUserId(userId: String, limit: Int = 50): List<Notification> =
-        col.whereEqualTo("user_id", userId)
+    // created_at 하한(cutoff)은 orderBy와 같은 필드에 대한 range 필터라 별도 인덱스 없이 기존 인덱스로 커버된다.
+    suspend fun findRecentByUserId(
+        userId: String,
+        limit: Int = 50,
+        retentionDays: Long = NOTIFICATION_LIST_RETENTION_DAYS
+    ): List<Notification> {
+        val cutoff = LocalDateTime.now().minusDays(retentionDays)
+        return col.whereEqualTo("user_id", userId)
+            .whereGreaterThanOrEqualTo("created_at", cutoff.toTimestamp())
             .orderBy("created_at", Query.Direction.DESCENDING)
             .limit(limit)
             .get().await().documents.map { it.toNotification() }
+    }
 
     suspend fun deleteByUserId(userId: String) {
         val docs = col.whereEqualTo("user_id", userId).get().await().documents
@@ -85,5 +93,9 @@ class NotificationRepository(private val firestore: Firestore) {
     companion object {
         // 서버 보관 정책(30일 고정, /api/settings/retention) — expire_at 계산에 사용.
         const val FIRESTORE_TTL_RETENTION_DAYS = 30L
+
+        // 알림 화면 문구("최근 7일간의 내역만 보관됩니다")와 실제 조회 범위를 일치시키기 위한 컷오프.
+        // 서버 보관 정책(30일 고정, /api/settings/retention)과는 별개로 알림 "목록 표시" 범위만 제한한다.
+        const val NOTIFICATION_LIST_RETENTION_DAYS = 7L
     }
 }
