@@ -152,6 +152,15 @@ class FallLogRepository(
         "is_confirmed" to isConfirmed,
         "video_url" to videoUrl?.let { encryptionService.encrypt(it) },
         "last_reminder_at" to lastReminderAt?.toTimestamp(),
-        "timestamp" to timestamp.toTimestamp()
+        "timestamp" to timestamp.toTimestamp(),
+        // Firestore TTL 정책(scripts/setup_firestore_ttl.py) 대상 필드 — 애플리케이션 코드는
+        // 이 값을 읽지 않는다. TTL은 필드 값 자체를 "삭제 예정 시각"으로 취급하므로 timestamp를
+        // 그대로 넘기면 저장 직후 삭제된다 — 반드시 미래 시각(발생 시각 + 보관일수)을 계산해 넣어야 한다.
+        "expire_at" to timestamp.plusDays(FIRESTORE_TTL_RETENTION_DAYS).toTimestamp()
     )
+
+    companion object {
+        // 서버 보관 정책(30일 고정, /api/settings/retention) — expire_at 계산에 사용.
+        const val FIRESTORE_TTL_RETENTION_DAYS = 30L
+    }
 }

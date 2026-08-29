@@ -67,6 +67,39 @@ jobs:
           JWT_SECRET: ci-test-secret-key-32-chars-long!!
           REDIS_URL: redis://localhost:6379
 
+  deploy-firestore-indexes:
+    runs-on: ubuntu-latest
+    needs: [ python-lint-and-test, kotlin-test ]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
+      # 사전 준비: GitHub Secrets에 아래 값 등록 필요
+      #   FIREBASE_SERVICE_ACCOUNT : Firestore 편집 권한이 있는 서비스 계정 키(JSON) 원문
+      #   FIREBASE_PROJECT_ID      : Firebase 프로젝트 ID
+      - name: Write service account key
+        run: echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > /tmp/firebase-key.json
+
+      - name: Deploy Firestore indexes (firestore.indexes.json)
+        run: firebase deploy --only firestore:indexes --project "$FIREBASE_PROJECT_ID" --non-interactive
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/firebase-key.json
+          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+
+      - name: Clean up service account key
+        if: always()
+        run: rm -f /tmp/firebase-key.json
+
   docker-build:
     runs-on: ubuntu-latest
     needs: [ python-lint-and-test, kotlin-test ]
