@@ -35,6 +35,40 @@ class FallLogServiceTest {
         fallLogService = FallLogService(fallLogRepository, storageService)
     }
 
+    // ── videoStatus 계산 (하나뿐인 근원 — FallLog.isDangerLevel 기반) ──────
+
+    @Test
+    fun `videoStatus - 위험 등급이고 video_url 없으면 processing`() = runTest {
+        val processingLog = baseLog.copy(videoUrl = null)
+        coEvery { fallLogRepository.findByLogIdAndUserId("log001", "testUser") } returns processingLog
+
+        val result = fallLogService.getLog("testUser", "log001")
+
+        assertEquals("processing", result.videoStatus)
+        assertEquals(false, result.hasVideo)
+    }
+
+    @Test
+    fun `videoStatus - 위험 등급이고 video_url 있으면 ready`() = runTest {
+        coEvery { fallLogRepository.findByLogIdAndUserId("log001", "testUser") } returns baseLog
+
+        val result = fallLogService.getLog("testUser", "log001")
+
+        assertEquals("ready", result.videoStatus)
+        assertEquals(true, result.hasVideo)
+    }
+
+    @Test
+    fun `videoStatus - 주의 등급이면 video_url 없어도 processing이 아니라 none`() = runTest {
+        val cautionLog = baseLog.copy(score = 60f, fall = false, videoUrl = null)
+        coEvery { fallLogRepository.findByLogIdAndUserId("log001", "testUser") } returns cautionLog
+
+        val result = fallLogService.getLog("testUser", "log001")
+
+        assertEquals("none", result.videoStatus)
+        assertEquals(false, result.hasVideo)
+    }
+
     // ── 단건 조회 ─────────────────────────────────────────────────
 
     @Test
