@@ -29,6 +29,13 @@ _DEVICES = "devices"
 _REALTIME = "realtime_data"
 _REALTIME_LIMIT = 2000
 
+# realtime_data.level에 실어 보내는 추론 오류 신호 — Android MainViewModel.INFERENCE_ERROR_LEVEL과
+# 문자열이 반드시 일치해야 한다(양쪽 다 자유 문자열 필드라 컴파일 타임 보장이 없음).
+INFERENCE_ERROR_LEVEL = "오류"
+
+# 하트비트 최소 전송 간격(초) — 프레임 속도와 무관하게 부하를 고정시키기 위한 스로틀.
+HEARTBEAT_INTERVAL_SEC = 5.0
+
 
 async def process_frame(landmarks: list, timestamp: float, user_id: str, device_id: str) -> StreamResponse:
     result = await infer_landmarks_async(landmarks, device_id, timestamp)
@@ -38,6 +45,12 @@ async def process_frame(landmarks: list, timestamp: float, user_id: str, device_
     # → 이 윈도우는 알림 판정에서 제외하고, 보호자에게는 직전 캐시 점수를 유지해 보여준다.
     if result.get("status") == "error":
         cached = await get_score(user_id)
+        score = cached["score"] if cached else 0.0
+        # updated_at을 갱신해두지 않으면 실제로는 프레임이 계속 들어오는데도(추론만 실패 중)
+        # 보호자 앱이 15초 뒤 "카메라 연결 필요"로 오판한다 — 연결 문제와 추론 오류를 구분해야
+        # 하므로 level에 INFERENCE_ERROR_LEVEL을 실어 보호자 앱이 별도 상태로 표시하게 한다.
+        # 이 문자열은 Android MainViewModel.INFERENCE_ERROR_LEVEL과 반드시 일치해야 함.
+        await _update_realtime(user_id, score, INFERENCE_ERROR_LEVEL)
         if cached:
             return StreamResponse(score=cached["score"], fall=False, level=cached["level"])
         return StreamResponse(score=0.0, fall=False, level=None)
@@ -119,6 +132,21 @@ async def _update_realtime(user_id: str, score: float, level: str) -> None:
             )
     except Exception as e:
         logger.error("/internal/realtime 호출 실패 user_id=%s: %s", user_id, e)
+
+
+# 추론 성공/실패/스킵과 완전히 무관 — 원시 프레임이 도착했다는 사실만 전달한다.
+# WS 핸들러에서 HEARTBEAT_INTERVAL_SEC 간격으로 스로틀링해서 호출한다(프레임 속도와 무관하게
+# 부하 고정).
+async def send_heartbeat(user_id: str) -> None:
+    try:
+        async with httpx.AsyncClient() as client:
+            await client.post(
+                f"{settings.kotlin_internal_base}/internal/heartbeat",
+                json={"user_id": user_id},
+                timeout=3.0,
+            )
+    except Exception as e:
+        logger.error("/internal/heartbeat 호출 실패 user_id=%s: %s", user_id, e)
 
 
 async def _save_fall_log(user_id: str, device_id: str, score: float, fall: bool, video_bytes: bytes | None) -> str:

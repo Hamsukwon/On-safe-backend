@@ -1,3 +1,5 @@
+import time
+
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
 from jose import JWTError
 from app.core.deps import get_current_user_id
@@ -25,6 +27,7 @@ async def ws_stream(websocket: WebSocket, token: str = Query(...)):
 
     user_id: str | None = None
     device_id: str | None = None
+    last_heartbeat = 0.0
 
     try:
         while True:
@@ -42,6 +45,14 @@ async def ws_stream(websocket: WebSocket, token: str = Query(...)):
                     continue
                 landmarks = data.get("landmarks", [])
                 timestamp = data.get("timestamp", 0.0)
+
+                # 추론 성공/실패와 무관하게 "프레임이 도착했다"만 스로틀링해서 알림 —
+                # 카메라 fps와 무관하게 하트비트 부하를 고정시킨다.
+                now = time.monotonic()
+                if now - last_heartbeat >= service.HEARTBEAT_INTERVAL_SEC:
+                    await service.send_heartbeat(user_id)
+                    last_heartbeat = now
+
                 result = await service.process_frame(landmarks, timestamp, user_id, device_id)
                 await websocket.send_json({
                     "type": "result",
