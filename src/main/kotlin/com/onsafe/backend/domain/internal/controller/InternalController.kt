@@ -1,6 +1,7 @@
 package com.onsafe.backend.domain.internal.controller
 
 import com.onsafe.backend.common.response.ApiResponse
+import com.onsafe.backend.domain.internal.model.dto.HeartbeatRequest
 import com.onsafe.backend.domain.internal.model.dto.SaveFallLogRequest
 import com.onsafe.backend.domain.internal.model.dto.UpdateRealtimeRequest
 import com.onsafe.backend.domain.internal.service.InternalService
@@ -24,5 +25,12 @@ class InternalController(private val internalService: InternalService) {
     suspend fun saveFallLog(@RequestBody req: SaveFallLogRequest): ApiResponse<Unit> {
         internalService.saveFallLog(req)
         return ApiResponse.ok("낙상 로그 저장 완료")
+    }
+
+    @Operation(summary = "카메라 프레임 하트비트 — 추론 성공 여부와 무관 (AI 서버 전용)", security = [])
+    @PostMapping("/heartbeat")
+    suspend fun heartbeat(@RequestBody req: HeartbeatRequest): ApiResponse<Unit> {
+        internalService.updateHeartbeat(req)
+        return ApiResponse.ok("하트비트 갱신 완료")
     }
 }

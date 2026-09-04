@@ -3,6 +3,7 @@ package com.onsafe.backend.domain.internal.service
 import com.onsafe.backend.domain.camera.model.entity.RealtimeData
 import com.onsafe.backend.domain.camera.model.entity.RiskLevel
 import com.onsafe.backend.domain.camera.repository.RealtimeDataRepository
+import com.onsafe.backend.domain.internal.model.dto.HeartbeatRequest
 import com.onsafe.backend.domain.internal.model.dto.SaveFallLogRequest
 import com.onsafe.backend.domain.internal.model.dto.UpdateRealtimeRequest
 import com.onsafe.backend.domain.logs.model.entity.FallLog
@@ -24,6 +25,11 @@ class InternalService(
         val data = existing?.copy(score = req.score, level = req.level)
             ?: RealtimeData(userId = req.userId, score = req.score, level = req.level)
         realtimeDataRepository.save(data)
+    }
+
+    // score/level(추론 결과)과 완전히 분리된 하트비트 — 프레임이 도착했다는 사실만 기록한다.
+    suspend fun updateHeartbeat(req: HeartbeatRequest) {
+        realtimeDataRepository.touchDeviceSeenAt(req.userId)
     }
 
     suspend fun saveFallLog(req: SaveFallLogRequest) {

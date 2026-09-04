@@ -21,7 +21,8 @@ class CameraService(
             userId = userId,
             score = data.score,
             level = data.level,
-            updatedAt = data.updatedAt
+            updatedAt = data.updatedAt,
+            deviceSeenAt = data.deviceSeenAt
         )
     }
 
